@@ -37,6 +37,7 @@ def main():
     from llama_index.vector_stores.faiss import FaissVectorStore
 
     # CPU embeddings
+    print("Загрузка модели эмбеддингов...")
     Settings.embed_model = HuggingFaceEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")
     Settings.node_parser = SentenceSplitter(chunk_size=512, chunk_overlap=50)
 
@@ -45,16 +46,17 @@ def main():
         print(f"Ошибка: каталог {args.source} не найден", file=sys.stderr)
         sys.exit(1)
 
-    if not any(f.endswith('.xml') for f in Path(args.source).rglob('*.xml')):
+    if not any(Path(args.source).rglob('*.xml')):
         print(f"Ошибка: в {args.source} нет XML файлов", file=sys.stderr)
         sys.exit(1)
 
     Path(args.index).mkdir(exist_ok=True)
 
     def build_index(source_dir: str, index_dir: str):
-        print(f"Индексирую {source_dir}...")
+        print(f"Чтение XML файлов из {source_dir}...")
         docs = SimpleDirectoryReader(source_dir, file_extractor={".xml": "text"}).load_data()
         print(f"Загружено {len(docs)} файлов")
+        print("Создание векторного индекса (может занять несколько минут)...")
 
         vector_store = FaissVectorStore(faiss.IndexFlatL2(384))
         storage_context = StorageContext.from_defaults(vector_store=vector_store)
@@ -65,6 +67,7 @@ def main():
 
     # Загрузка/создание индекса
     try:
+        print("Загрузка индекса с диска...")
         index = VectorStoreIndex.from_persist_dir(args.index)
         print("Индекс загружен")
     except:

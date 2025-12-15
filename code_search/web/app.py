@@ -16,10 +16,10 @@ def create_app(engine: IndexEngine, searcher: HybridSearch, config_name: str) ->
     app = FastAPI()
     
     template_path = Path(__file__).parent / "templates" / "index.html"
-    template = template_path.read_text(encoding="utf-8")
 
     @app.get("/", response_class=HTMLResponse)
     async def index_page():
+        template = template_path.read_text(encoding="utf-8")
         return template.replace("{{ config_name }}", config_name)
 
     @app.get("/indexing-status")

@@ -57,42 +57,33 @@ function startPolling(){
 async function updateProgress(){
     const s=document.getElementById('status');
     try {
-        const res = await fetch('/indexing-status');
-        const data = await res.json();
-        if(!data.running && !data.mode){
+        const res = await fetch('/indexing-progress');
+        const d = await res.json();
+        if(!d.running && !d.mode){
             s.style.display='none';
             if(pollInterval){clearInterval(pollInterval);pollInterval=null;}
             return;
         }
         s.style.display='block';
-        const pct = data.total_files > 0 ? Math.round(data.processed_files / data.total_files * 100) : 0;
-        const mode = data.mode === 'full' ? 'Полная индексация' : 'Обновление';
-        const fmtTime = ts => ts ? new Date(ts * 1000).toLocaleTimeString('ru-RU') : '...';
-        const fmtDur = sec => {if(!sec) return '0:00'; sec=Math.round(sec); const m=Math.floor(sec/60),s=sec%60; return m+':'+(s<10?'0':'')+s;};
-        const started = fmtTime(data.started_at);
-        const elapsedSec = data.started_at ? (Date.now()/1000 - data.started_at) : 0;
-        const elapsed = fmtDur(elapsedSec);
-        const speed = elapsedSec > 0 ? (data.total_chunks / elapsedSec).toFixed(1) : '0.0';
-        const etaTime = fmtTime(data.eta_time);
-        if(data.running){
+        const mode = d.mode === 'full' ? 'Полная индексация' : 'Обновление';
+        if(d.running){
             s.style.background='#fff3cd';
-            if(data.total_files === 0){
-                s.innerHTML = `<b>⏳ ${mode}</b><div class="stats">Подготовка... | Начало: ${started}</div>`;
+            if(d.total_files === 0){
+                s.innerHTML = `<b>⏳ ${mode}</b><div class="stats">Подготовка... | Начало: ${d.started}</div>`;
             } else {
                 s.innerHTML = `<b>⏳ ${mode}</b>
-<div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
-<div class="stats">Файлов: ${data.processed_files}/${data.total_files} (${pct}%) | Чанков: ${data.total_chunks} | Скорость: ${speed}/с</div>
-<div class="stats">Начало: ${started} | Прошло: ${elapsed} | Конец: ${etaTime}</div>
-<div class="stats" style="font-size:11px;color:#999">${data.last_file} ${data.status_detail ? '(' + data.status_detail + ')' : ''}</div>`;
+<div class="progress-bar"><div class="progress-fill" style="width:${d.pct}%"></div></div>
+<div class="stats">[${d.pct}%] ${d.processed_files}/${d.total_files} | в базе: ${d.collection_count} | проиндексировано: ${d.indexed} | ${d.speed}/с | начало: ${d.started} | прошло: ${d.elapsed} | конец: ${d.eta_time}</div>
+<div class="stats" style="font-size:11px;color:#999">${d.last_file} ${d.status_detail ? '(' + d.status_detail + ')' : ''}</div>`;
             }
             if(!pollInterval) startPolling();
-        } else if(data.error){
+        } else if(d.error){
             s.style.background='#f8d7da';
-            s.innerHTML=`❌ Ошибка: ${data.error}`;
+            s.innerHTML=`❌ Ошибка: ${d.error}`;
             if(pollInterval){clearInterval(pollInterval);pollInterval=null;}
         } else {
             s.style.background='#d4edda';
-            s.innerHTML=`✅ Готово! Файлов: ${data.processed_files}, чанков: ${data.total_chunks}, время: ${data.elapsed}с`;
+            s.innerHTML=`✅ Готово! Файлов: ${d.processed_files}, в базе: ${d.collection_count}, время: ${d.elapsed}`;
             if(pollInterval){clearInterval(pollInterval);pollInterval=null;}
         }
     } catch(e) {

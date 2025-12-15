@@ -7,7 +7,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
 
 from ..config import VECTOR_SIZE, COLLECTION_NAME, indexing_status, model_state
-from ..utils import format_time, format_duration
+from ..utils import format_time, format_duration  # для логов начала/конца
 from .hasher import file_hash, load_hashes, save_hashes
 from .chunker import chunk_text
 
@@ -82,15 +82,8 @@ class IndexEngine:
 
     def _print_progress(self):
         """Вывод прогресса в консоль."""
-        s = indexing_status
-        if s.running and s.total_files > 0:
-            pct = round(s.processed_files / s.total_files * 100) if s.total_files > 0 else 0
-            started = format_time(s.started_at) if s.started_at else "?"
-            elapsed_sec = time.time() - s.started_at if s.started_at else 0
-            elapsed = format_duration(elapsed_sec)
-            eta_time = format_time(s.eta_time) if s.eta_time else "..."
-            speed = s.total_chunks / elapsed_sec if elapsed_sec > 0 else 0
-            print(f"[{pct}%] {s.processed_files}/{s.total_files} | {s.total_chunks} чанков | {speed:.1f}/с | начало: {started} | прошло: {elapsed} | конец: {eta_time}", flush=True)
+        if indexing_status.running and indexing_status.total_files > 0:
+            print(indexing_status.format_console(self.get_collection_count()), flush=True)
 
     def full_reindex(self) -> dict:
         """Полная переиндексация."""
@@ -134,6 +127,7 @@ class IndexEngine:
                     for p, emb in zip(batch_points, embeddings)
                 ]
                 self.client.upsert(collection_name=COLLECTION_NAME, points=points)
+                indexing_status.chunks_in_db += len(batch_points)
                 batch_points = []
 
             for i, file_path in enumerate(files):

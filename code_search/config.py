@@ -18,7 +18,8 @@ class IndexingStatus:
     started_at: float | None = None
     total_files: int = 0
     processed_files: int = 0
-    total_chunks: int = 0
+    total_chunks: int = 0  # подготовлено в батче
+    chunks_in_db: int = 0  # реально записано в Qdrant
     speed: float = 0
     elapsed: float = 0
     eta: float | None = None
@@ -35,6 +36,7 @@ class IndexingStatus:
         self.total_files = 0
         self.processed_files = 0
         self.total_chunks = 0
+        self.chunks_in_db = 0
         self.speed = 0
         self.elapsed = 0
         self.eta = None
@@ -51,6 +53,8 @@ class IndexingStatus:
             "total_files": self.total_files,
             "processed_files": self.processed_files,
             "total_chunks": self.total_chunks,
+            "chunks_in_db": self.chunks_in_db,
+            "chunks_pending": self.total_chunks - self.chunks_in_db,
             "speed": self.speed,
             "elapsed": self.elapsed,
             "eta": self.eta,
@@ -59,6 +63,36 @@ class IndexingStatus:
             "last_file": self.last_file,
             "status_detail": self.status_detail,
         }
+
+    def format_progress(self, collection_count: int = 0) -> dict:
+        """Форматированные данные прогресса для консоли и веба."""
+        from .utils import format_time, format_duration
+        
+        elapsed_sec = time.time() - self.started_at if self.started_at else 0
+        pct = round(self.processed_files / self.total_files * 100) if self.total_files > 0 else 0
+        speed = self.chunks_in_db / elapsed_sec if elapsed_sec > 0 else 0
+        
+        return {
+            "pct": pct,
+            "processed_files": self.processed_files,
+            "total_files": self.total_files,
+            "collection_count": collection_count,
+            "indexed": self.chunks_in_db,
+            "speed": round(speed, 1),
+            "started": format_time(self.started_at) if self.started_at else "?",
+            "elapsed": format_duration(elapsed_sec),
+            "eta_time": format_time(self.eta_time) if self.eta_time else "...",
+            "last_file": self.last_file,
+            "status_detail": self.status_detail,
+            "mode": self.mode,
+            "running": self.running,
+            "error": self.error,
+        }
+
+    def format_console(self, collection_count: int = 0) -> str:
+        """Строка прогресса для консоли."""
+        p = self.format_progress(collection_count)
+        return f"[{p['pct']}%] {p['processed_files']}/{p['total_files']} | в базе: {p['collection_count']} | проиндексировано: {p['indexed']} | {p['speed']}/с | начало: {p['started']} | прошло: {p['elapsed']} | конец: {p['eta_time']}"
 
 
 @dataclass

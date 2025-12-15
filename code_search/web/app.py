@@ -26,6 +26,11 @@ def create_app(engine: IndexEngine, searcher: HybridSearch, config_name: str) ->
     async def get_indexing_status():
         return indexing_status.to_dict()
 
+    @app.get("/indexing-progress")
+    async def get_indexing_progress():
+        """Форматированный прогресс для веба."""
+        return indexing_status.format_progress(engine.get_collection_count())
+
     @app.post("/mcp/tools/1c_search")
     async def mcp_search(request: dict) -> dict[str, Any]:
         query = request["params"]["query"]
@@ -41,7 +46,8 @@ def create_app(engine: IndexEngine, searcher: HybridSearch, config_name: str) ->
         return {
             "status": "ok",
             "source": str(engine.source_dir),
-            "chunks": engine.get_collection_count(),
+            "chunks_in_db": engine.get_collection_count(),
+            "chunks_pending": indexing_status.total_chunks - indexing_status.chunks_in_db if indexing_status.running else 0,
             "indexing": indexing_status.running
         }
 

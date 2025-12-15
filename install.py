@@ -4,14 +4,12 @@ import subprocess
 import sys
 
 PACKAGES = [
-    "llama-index-core",
-    "llama-index-embeddings-huggingface",
-    "llama-index-vector-stores-faiss",
-    "faiss-cpu",
+    "qdrant-client",
+    "sentence-transformers",
     "fastapi",
     "uvicorn",
-    "sentence-transformers",
     "pymorphy3",
+    "tqdm",
 ]
 
 def main():

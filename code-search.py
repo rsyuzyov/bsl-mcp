@@ -17,6 +17,7 @@ def parse_args():
     parser.add_argument("--source", required=True, help="Каталог выгрузки 1С (с Configuration.xml)")
     parser.add_argument("--port", type=int, default=8000, help="MCP порт (default: 8000)")
     parser.add_argument("--index", default="./1c-index", help="Каталог индекса (default: ./1c-index)")
+    parser.add_argument("--name", default=None, help="Название ИБ (если не указано, берётся из Configuration.xml)")
 
     if len(sys.argv) == 1:
         parser.print_help()
@@ -72,6 +73,29 @@ def main():
         print(f"Ошибка: в {args.source} нет XML файлов", file=sys.stderr)
         sys.exit(1)
 
+    def get_config_name(source_dir: str) -> str:
+        """Получить название конфигурации из Configuration.xml (Synonym)"""
+        import xml.etree.ElementTree as ET
+        config_file = Path(source_dir) / "Configuration.xml"
+        if not config_file.exists():
+            return Path(source_dir).name
+        try:
+            tree = ET.parse(config_file)
+            root = tree.getroot()
+            # Ищем Synonym в любом namespace
+            for elem in root.iter():
+                if elem.tag.endswith("}Synonym") or elem.tag == "Synonym":
+                    # Внутри Synonym ищем v8:item/v8:content
+                    for item in elem.iter():
+                        if item.tag.endswith("}content") or item.tag == "content":
+                            if item.text:
+                                return item.text
+            return Path(source_dir).name
+        except Exception:
+            return Path(source_dir).name
+
+    config_name = args.name if args.name else get_config_name(args.source)
+
     Path(args.index).mkdir(exist_ok=True)
     meta_file = Path(args.index) / "file_hashes.json"
     qdrant_path = Path(args.index) / "qdrant"
@@ -100,6 +124,33 @@ def main():
     def get_all_files(source_dir: str) -> list[Path]:
         source_path = Path(source_dir)
         return list(source_path.rglob("*.xml")) + list(source_path.rglob("*.bsl"))
+
+    def quick_check_changes(source_dir: str) -> tuple[bool, int, int, int]:
+        """Быстрая проверка изменений по mtime+size (без чтения файлов).
+        Возвращает: (есть_изменения, новых, изменённых, удалённых)"""
+        old_hashes = load_hashes()
+        if not old_hashes:
+            return True, 0, 0, 0
+        
+        files = get_all_files(source_dir)
+        current_files = {}
+        added, changed = 0, 0
+        
+        for file_path in files:
+            rel_path = str(file_path.relative_to(source_dir))
+            stat = file_path.stat()
+            quick_key = f"{stat.st_mtime_ns}:{stat.st_size}"
+            current_files[rel_path] = quick_key
+            
+            if rel_path not in old_hashes:
+                added += 1
+            elif not old_hashes[rel_path].startswith(quick_key.split(":")[0][:10]):
+                # mtime изменился — возможно файл изменён
+                changed += 1
+        
+        deleted = len(set(old_hashes.keys()) - set(current_files.keys()))
+        has_changes = added > 0 or changed > 0 or deleted > 0
+        return has_changes, added, changed, deleted
 
     def embed_texts(texts: list[str]) -> list[list[float]]:
         prefixed = ["passage: " + t for t in texts]
@@ -352,102 +403,94 @@ def main():
 
     @app.get("/", response_class=HTMLResponse)
     async def index_page():
-        return """<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>1C Code Search</title>
+        return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Поиск по ИБ {config_name}</title>
 <style>
-body{font-family:system-ui;max-width:900px;margin:40px auto;padding:0 20px}
-input{width:60%;padding:10px;font-size:16px}
-button{padding:10px 15px;font-size:14px;margin:2px;cursor:pointer}
-.result{border:1px solid #ddd;margin:10px 0;padding:15px;border-radius:5px}
-.file{color:#666;font-size:12px}.score{color:#090;font-weight:bold}
-pre{background:#f5f5f5;padding:10px;overflow-x:auto;font-size:13px}
-.btn-full{background:#dc3545;color:#fff;border:none}
-.btn-inc{background:#28a745;color:#fff;border:none}
-#status{margin:10px 0;padding:15px;border-radius:5px;display:none}
-.progress-bar{background:#e9ecef;border-radius:5px;height:20px;margin:10px 0}
-.progress-fill{background:#007bff;height:100%;border-radius:5px;transition:width 0.3s}
-.stats{font-size:13px;color:#666;margin-top:5px}
+body{{font-family:system-ui;max-width:900px;margin:40px auto;padding:0 20px}}
+input{{width:60%;padding:8px;font-size:14px}}
+button{{padding:6px 12px;font-size:12px;margin:2px;cursor:pointer}}
+.result{{border:1px solid #ddd;margin:10px 0;padding:15px;border-radius:5px}}
+.file{{color:#666;font-size:12px}}.score{{color:#090;font-weight:bold}}
+pre{{background:#f5f5f5;padding:10px;overflow-x:auto;font-size:13px}}
+.btn-full{{background:#dc3545;color:#fff;border:none}}
+.btn-inc{{background:#28a745;color:#fff;border:none}}
+#status{{margin:10px 0;padding:15px;border-radius:5px;display:none}}
+.progress-bar{{background:#e9ecef;border-radius:5px;height:20px;margin:10px 0}}
+.progress-fill{{background:#007bff;height:100%;border-radius:5px;transition:width 0.3s}}
+.stats{{font-size:13px;color:#666;margin-top:5px}}
+.header{{display:flex;align-items:center;gap:15px;margin-bottom:20px}}
+.header h1{{margin:0;font-size:1.3em}}
 </style></head>
-<body><h1>🔍 1C Code Search</h1>
+<body>
+<div class="header">
+<h1>🔍 Поиск по ИБ {config_name}</h1>
+<button class="btn-inc" onclick="reindex('incremental')">Обновить</button>
+<button class="btn-full" onclick="reindex('full')">Переиндексировать</button>
+</div>
 <form onsubmit="search();return false"><input id="q" placeholder="Поиск по коду 1С..." autofocus>
 <button>Найти</button></form>
-<div style="margin-top:15px">
-<button class="btn-inc" onclick="reindex('incremental')">🔄 Обновить изменённые</button>
-<button class="btn-full" onclick="reindex('full')">⚠️ Полная переиндексация</button>
-</div>
 <div id="status"></div>
 <div id="results"></div>
 <script>
 let pollInterval = null;
 
-async function search(){
+async function search(){{
     const q=document.getElementById('q').value;
     const r=document.getElementById('results');
     r.innerHTML='Поиск...';
     const res=await fetch('/search?q='+encodeURIComponent(q));
     const data=await res.json();
-    r.innerHTML=data.map(d=>`<div class="result"><span class="score">${d.score.toFixed(3)}</span> <span class="match">[${d.match}]</span>
-<div class="file">${d.file}</div><pre>${d.text.replace(/</g,'&lt;')}</pre></div>`).join('')||'Ничего не найдено';
-}
+    r.innerHTML=data.map(d=>`<div class="result"><span class="score">${{d.score.toFixed(3)}}</span> <span class="match">[${{d.match}}]</span>
+<div class="file">${{d.file}}</div><pre>${{d.text.replace(/</g,'&lt;')}}</pre></div>`).join('')||'Ничего не найдено';
+}}
 
-async function reindex(mode){
-    const msg=mode==='full'?'Полная переиндексация удалит весь индекс. Продолжить?':'Обновить изменённые файлы?';
+async function reindex(mode){{
+    const msg=mode==='full'?'Переиндексация удалит весь индекс. Продолжить?':'Обновить индекс?';
     if(!confirm(msg))return;
-    
-    fetch('/reindex/'+mode,{method:'POST'});
+    fetch('/reindex/'+mode,{{method:'POST'}});
     startPolling();
-}
+}}
 
-function startPolling(){
+function startPolling(){{
     const s=document.getElementById('status');
     s.style.display='block';
     if(pollInterval) clearInterval(pollInterval);
     pollInterval = setInterval(updateProgress, 500);
     updateProgress();
-}
+}}
 
-async function updateProgress(){
+async function updateProgress(){{
     const s=document.getElementById('status');
-    try {
+    try {{
         const res = await fetch('/indexing-status');
         const data = await res.json();
-        
-        if(!data.running && data.total_files === 0){
+        if(!data.running && data.total_files === 0){{
             s.style.display='none';
-            if(pollInterval){clearInterval(pollInterval);pollInterval=null;}
+            if(pollInterval){{clearInterval(pollInterval);pollInterval=null;}}
             return;
-        }
-        
+        }}
         const pct = data.total_files > 0 ? Math.round(data.processed_files / data.total_files * 100) : 0;
         const mode = data.mode === 'full' ? 'Полная индексация' : 'Обновление';
-        const eta = data.eta ? `~${Math.round(data.eta)}с` : '...';
-        
-        if(data.running){
+        const eta = data.eta ? `~${{Math.round(data.eta)}}с` : '...';
+        if(data.running){{
             s.style.background='#fff3cd';
-            s.innerHTML = `<b>⏳ ${mode}</b>
-<div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
-<div class="stats">
-    Файлов: ${data.processed_files}/${data.total_files} (${pct}%) | 
-    Чанков: ${data.total_chunks} | 
-    Скорость: ${data.speed}/с | 
-    Осталось: ${eta}
-</div>
-<div class="stats" style="font-size:11px;color:#999">${data.last_file}</div>`;
-        } else if(data.error){
+            s.innerHTML = `<b>⏳ ${{mode}}</b>
+<div class="progress-bar"><div class="progress-fill" style="width:${{pct}}%"></div></div>
+<div class="stats">Файлов: ${{data.processed_files}}/${{data.total_files}} (${{pct}}%) | Чанков: ${{data.total_chunks}} | Скорость: ${{data.speed}}/с | Осталось: ${{eta}}</div>
+<div class="stats" style="font-size:11px;color:#999">${{data.last_file}}</div>`;
+        }} else if(data.error){{
             s.style.background='#f8d7da';
-            s.innerHTML=`❌ Ошибка: ${data.error}`;
-            if(pollInterval){clearInterval(pollInterval);pollInterval=null;}
-        } else {
+            s.innerHTML=`❌ Ошибка: ${{data.error}}`;
+            if(pollInterval){{clearInterval(pollInterval);pollInterval=null;}}
+        }} else {{
             s.style.background='#d4edda';
-            s.innerHTML=`✅ Готово! Файлов: ${data.processed_files}, чанков: ${data.total_chunks}, время: ${data.elapsed}с`;
-            if(pollInterval){clearInterval(pollInterval);pollInterval=null;}
-        }
-    } catch(e) {
+            s.innerHTML=`✅ Готово! Файлов: ${{data.processed_files}}, чанков: ${{data.total_chunks}}, время: ${{data.elapsed}}с`;
+            if(pollInterval){{clearInterval(pollInterval);pollInterval=null;}}
+        }}
+    }} catch(e) {{
         console.error(e);
-    }
-}
-
-// Проверяем статус при загрузке страницы
+    }}
+}}
 updateProgress();
 </script></body></html>"""
 
@@ -483,13 +526,34 @@ updateProgress();
         threading.Thread(target=incremental_reindex, args=(args.source,), daemon=True).start()
         return {"started": True, "mode": "incremental"}
 
+    def periodic_check():
+        """Проверка изменений каждые 5 минут"""
+        while True:
+            time.sleep(300)  # 5 минут
+            if indexing_status["running"]:
+                continue
+            has_changes, added, changed, deleted = quick_check_changes(args.source)
+            if has_changes:
+                print(f"[auto] Обнаружены изменения: +{added} ~{changed} -{deleted}, запускаю обновление...")
+                threading.Thread(target=incremental_reindex, args=(args.source,), daemon=True).start()
+
     # Запуск
     count = get_collection_count()
     if count == 0:
-        print("Индекс пуст, запускаю фоновую индексацию...")
+        print("Индекс пуст, запускаю полную индексацию...")
         threading.Thread(target=full_reindex, args=(args.source,), daemon=True).start()
     else:
         print(f"Индекс загружен: {count} чанков")
+        print("Проверка изменений...")
+        has_changes, added, changed, deleted = quick_check_changes(args.source)
+        if has_changes:
+            print(f"Обнаружены изменения: +{added} ~{changed} -{deleted}, запускаю обновление...")
+            threading.Thread(target=incremental_reindex, args=(args.source,), daemon=True).start()
+        else:
+            print("Изменений нет")
+
+    # Фоновая проверка каждые 5 минут
+    threading.Thread(target=periodic_check, daemon=True).start()
 
     print(f"Сервер на http://localhost:{args.port}")
     uvicorn.run(app, host="0.0.0.0", port=args.port)

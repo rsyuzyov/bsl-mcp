@@ -54,16 +54,29 @@ def main():
     import pymorphy3
     import uvicorn
     from fastapi import FastAPI
-    from fastapi.responses import HTMLResponse
+    from fastapi.responses import HTMLResponse, JSONResponse
     from qdrant_client import QdrantClient
     from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
-    from sentence_transformers import SentenceTransformer
 
     morph = pymorphy3.MorphAnalyzer()
-
-    print("Загрузка модели эмбеддингов...")
-    embed_model = SentenceTransformer("intfloat/multilingual-e5-small")
     VECTOR_SIZE = 384
+
+    # Модель загружается в фоне
+    model_state = {"model": None, "loading": True, "error": None}
+
+    def load_model_background():
+        try:
+            print("Загрузка модели эмбеддингов...")
+            from sentence_transformers import SentenceTransformer
+            model_state["model"] = SentenceTransformer("intfloat/multilingual-e5-small")
+            model_state["loading"] = False
+            print("Модель загружена")
+        except Exception as e:
+            model_state["error"] = str(e)
+            model_state["loading"] = False
+            print(f"Ошибка загрузки модели: {e}")
+
+    threading.Thread(target=load_model_background, daemon=True).start()
 
     if not os.path.exists(args.source):
         print(f"Ошибка: каталог {args.source} не найден", file=sys.stderr)
@@ -153,8 +166,10 @@ def main():
         return has_changes, added, changed, deleted
 
     def embed_texts(texts: list[str]) -> list[list[float]]:
+        if model_state["model"] is None:
+            raise RuntimeError("Модель ещё загружается")
         prefixed = ["passage: " + t for t in texts]
-        embeddings = embed_model.encode(prefixed, show_progress_bar=False)
+        embeddings = model_state["model"].encode(prefixed, show_progress_bar=False)
         return embeddings.tolist()
 
     def chunk_text(text: str, chunk_size: int = 1024, overlap: int = 100) -> list[str]:
@@ -358,10 +373,15 @@ def main():
         return " ".join(morph.parse(w)[0].normal_form for w in words)
 
     def hybrid_search(query: str, top_k: int = 5):
+        if model_state["loading"]:
+            return [{"file": "", "text": "⏳ Модель загружается, подождите...", "score": 0, "match": "loading"}]
+        if model_state["error"]:
+            return [{"file": "", "text": f"❌ Ошибка: {model_state['error']}", "score": 0, "match": "error"}]
+        
         query_lower = query.lower()
         query_normalized = normalize(query)
         
-        query_embedding = embed_model.encode(["query: " + query]).tolist()[0]
+        query_embedding = model_state["model"].encode(["query: " + query]).tolist()[0]
         search_results = client.query_points(
             collection_name=COLLECTION_NAME,
             query=query_embedding,
@@ -464,20 +484,26 @@ async function updateProgress(){{
     try {{
         const res = await fetch('/indexing-status');
         const data = await res.json();
-        if(!data.running && data.total_files === 0){{
+        if(!data.running && !data.mode){{
             s.style.display='none';
             if(pollInterval){{clearInterval(pollInterval);pollInterval=null;}}
             return;
         }}
+        s.style.display='block';
         const pct = data.total_files > 0 ? Math.round(data.processed_files / data.total_files * 100) : 0;
         const mode = data.mode === 'full' ? 'Полная индексация' : 'Обновление';
         const eta = data.eta ? `~${{Math.round(data.eta)}}с` : '...';
         if(data.running){{
             s.style.background='#fff3cd';
-            s.innerHTML = `<b>⏳ ${{mode}}</b>
+            if(data.total_files === 0){{
+                s.innerHTML = `<b>⏳ ${{mode}}</b><div class="stats">Подготовка...</div>`;
+            }} else {{
+                s.innerHTML = `<b>⏳ ${{mode}}</b>
 <div class="progress-bar"><div class="progress-fill" style="width:${{pct}}%"></div></div>
 <div class="stats">Файлов: ${{data.processed_files}}/${{data.total_files}} (${{pct}}%) | Чанков: ${{data.total_chunks}} | Скорость: ${{data.speed}}/с | Осталось: ${{eta}}</div>
 <div class="stats" style="font-size:11px;color:#999">${{data.last_file}}</div>`;
+            }}
+            if(!pollInterval) startPolling();
         }} else if(data.error){{
             s.style.background='#f8d7da';
             s.innerHTML=`❌ Ошибка: ${{data.error}}`;
@@ -491,6 +517,7 @@ async function updateProgress(){{
         console.error(e);
     }}
 }}
+setInterval(updateProgress, 5000);
 updateProgress();
 </script></body></html>"""
 
@@ -514,6 +541,8 @@ updateProgress();
 
     @app.post("/reindex/full")
     async def reindex_full_endpoint():
+        if model_state["loading"]:
+            return {"error": "Модель ещё загружается"}
         if indexing_status["running"]:
             return {"error": "Индексация уже запущена"}
         threading.Thread(target=full_reindex, args=(args.source,), daemon=True).start()
@@ -521,6 +550,8 @@ updateProgress();
 
     @app.post("/reindex/incremental")
     async def reindex_incremental_endpoint():
+        if model_state["loading"]:
+            return {"error": "Модель ещё загружается"}
         if indexing_status["running"]:
             return {"error": "Индексация уже запущена"}
         threading.Thread(target=incremental_reindex, args=(args.source,), daemon=True).start()
@@ -530,27 +561,37 @@ updateProgress();
         """Проверка изменений каждые 5 минут"""
         while True:
             time.sleep(300)  # 5 минут
-            if indexing_status["running"]:
+            if indexing_status["running"] or model_state["loading"] or model_state["error"]:
                 continue
             has_changes, added, changed, deleted = quick_check_changes(args.source)
             if has_changes:
                 print(f"[auto] Обнаружены изменения: +{added} ~{changed} -{deleted}, запускаю обновление...")
                 threading.Thread(target=incremental_reindex, args=(args.source,), daemon=True).start()
 
-    # Запуск
-    count = get_collection_count()
-    if count == 0:
-        print("Индекс пуст, запускаю полную индексацию...")
-        threading.Thread(target=full_reindex, args=(args.source,), daemon=True).start()
-    else:
-        print(f"Индекс загружен: {count} чанков")
-        print("Проверка изменений...")
-        has_changes, added, changed, deleted = quick_check_changes(args.source)
-        if has_changes:
-            print(f"Обнаружены изменения: +{added} ~{changed} -{deleted}, запускаю обновление...")
-            threading.Thread(target=incremental_reindex, args=(args.source,), daemon=True).start()
+    def startup_indexing():
+        """Ждём загрузки модели, потом проверяем индекс"""
+        # Ждём загрузки модели
+        while model_state["loading"]:
+            time.sleep(0.5)
+        if model_state["error"]:
+            return
+        
+        count = get_collection_count()
+        if count == 0:
+            print("Индекс пуст, запускаю полную индексацию...")
+            full_reindex(args.source)
         else:
-            print("Изменений нет")
+            print(f"Индекс загружен: {count} чанков")
+            print("Проверка изменений...")
+            has_changes, added, changed, deleted = quick_check_changes(args.source)
+            if has_changes:
+                print(f"Обнаружены изменения: +{added} ~{changed} -{deleted}, запускаю обновление...")
+                incremental_reindex(args.source)
+            else:
+                print("Изменений нет")
+
+    # Запуск индексации после загрузки модели
+    threading.Thread(target=startup_indexing, daemon=True).start()
 
     # Фоновая проверка каждые 5 минут
     threading.Thread(target=periodic_check, daemon=True).start()

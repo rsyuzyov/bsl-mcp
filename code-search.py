@@ -30,12 +30,14 @@ def parse_args():
 indexing_status = {
     "running": False,
     "mode": None,  # "full" или "incremental"
+    "started_at": None,  # timestamp начала
     "total_files": 0,
     "processed_files": 0,
     "total_chunks": 0,
     "speed": 0,
     "elapsed": 0,
     "eta": None,
+    "eta_time": None,  # время окончания (timestamp)
     "error": None,
     "last_file": "",
 }
@@ -143,7 +145,8 @@ def main():
         Возвращает: (есть_изменения, новых, изменённых, удалённых)"""
         old_hashes = load_hashes()
         if not old_hashes:
-            return True, 0, 0, 0
+            # Нет сохранённых хешей — нужна полная индексация, не инкрементальная
+            return False, 0, 0, 0
         
         files = get_all_files(source_dir)
         current_files = {}
@@ -165,11 +168,31 @@ def main():
         has_changes = added > 0 or changed > 0 or deleted > 0
         return has_changes, added, changed, deleted
 
+    def format_time(ts: float) -> str:
+        """Форматирует timestamp в HH:MM:SS"""
+        from datetime import datetime
+        return datetime.fromtimestamp(ts).strftime("%H:%M:%S")
+
+    def format_duration(sec: float) -> str:
+        """Форматирует секунды в MM:SS или HH:MM:SS"""
+        sec = int(sec)
+        if sec < 3600:
+            return f"{sec // 60}:{sec % 60:02d}"
+        return f"{sec // 3600}:{(sec % 3600) // 60:02d}:{sec % 60:02d}"
+
     def embed_texts(texts: list[str]) -> list[list[float]]:
         if model_state["model"] is None:
             raise RuntimeError("Модель ещё загружается")
         prefixed = ["passage: " + t for t in texts]
         embeddings = model_state["model"].encode(prefixed, show_progress_bar=False)
+        # Вывод прогресса в консоль
+        s = indexing_status
+        if s["running"] and s["total_files"] > 0:
+            pct = round(s["processed_files"] / s["total_files"] * 100)
+            started = format_time(s["started_at"]) if s["started_at"] else "?"
+            elapsed = format_duration(s["elapsed"]) if s["elapsed"] else "0:00"
+            eta_time = format_time(s["eta_time"]) if s["eta_time"] else "..."
+            print(f"[{pct}%] {s['processed_files']}/{s['total_files']} | {s['total_chunks']} чанков | {s['speed']}/с | начало: {started} | прошло: {elapsed} | конец: {eta_time} | {s['last_file']}")
         return embeddings.tolist()
 
     def chunk_text(text: str, chunk_size: int = 1024, overlap: int = 100) -> list[str]:
@@ -194,9 +217,12 @@ def main():
         """Полная переиндексация в фоне"""
         global indexing_status
         
+        start_time = time.time()
         indexing_status = {
-            "running": True, "mode": "full", "total_files": 0, "processed_files": 0,
-            "total_chunks": 0, "speed": 0, "elapsed": 0, "eta": None, "error": None, "last_file": ""
+            "running": True, "mode": "full", "started_at": start_time,
+            "total_files": 0, "processed_files": 0,
+            "total_chunks": 0, "speed": 0, "elapsed": 0, "eta": None, "eta_time": None,
+            "error": None, "last_file": ""
         }
         
         try:
@@ -214,8 +240,21 @@ def main():
             batch_points = []
             batch_size = 100
             point_id = 0
-            start_time = time.time()
             
+            def flush_batch():
+                """Отправить накопленный батч в Qdrant"""
+                nonlocal batch_points
+                if not batch_points:
+                    return
+                texts = [p["text"] for p in batch_points]
+                embeddings = embed_texts(texts)
+                points = [
+                    PointStruct(id=p["id"], vector=emb, payload={**p["payload"], "text": p["text"]})
+                    for p, emb in zip(batch_points, embeddings)
+                ]
+                client.upsert(collection_name=COLLECTION_NAME, points=points)
+                batch_points = []
+
             for i, file_path in enumerate(files):
                 try:
                     content = file_path.read_text(encoding="utf-8-sig", errors="ignore")
@@ -231,38 +270,29 @@ def main():
                         })
                         point_id += 1
                         total_chunks += 1
+                        
+                        # Отправляем батч сразу как накопилось 100 чанков
+                        if len(batch_points) >= batch_size:
+                            indexing_status["status_detail"] = "embedding..."
+                            flush_batch()
+                            indexing_status["status_detail"] = "reading..."
                     
-                    if len(batch_points) >= batch_size:
-                        texts = [p["text"] for p in batch_points]
-                        embeddings = embed_texts(texts)
-                        points = [
-                            PointStruct(id=p["id"], vector=emb, payload={**p["payload"], "text": p["text"]})
-                            for p, emb in zip(batch_points, embeddings)
-                        ]
-                        client.upsert(collection_name=COLLECTION_NAME, points=points)
-                        batch_points = []
-                    
-                    # Обновляем статус
+                    # Обновляем статус после каждого файла
                     elapsed = time.time() - start_time
+                    eta_sec = round((len(files) - i - 1) * elapsed / (i + 1), 0) if i > 0 else None
                     indexing_status.update({
                         "processed_files": i + 1,
                         "total_chunks": total_chunks,
                         "elapsed": round(elapsed, 1),
                         "speed": round(total_chunks / elapsed, 1) if elapsed > 0 else 0,
-                        "eta": round((len(files) - i - 1) * elapsed / (i + 1), 0) if i > 0 else None
+                        "eta": eta_sec,
+                        "eta_time": time.time() + eta_sec if eta_sec else None,
                     })
                 except Exception as e:
                     print(f"Ошибка {file_path}: {e}")
             
             # Остаток
-            if batch_points:
-                texts = [p["text"] for p in batch_points]
-                embeddings = embed_texts(texts)
-                points = [
-                    PointStruct(id=p["id"], vector=emb, payload={**p["payload"], "text": p["text"]})
-                    for p, emb in zip(batch_points, embeddings)
-                ]
-                client.upsert(collection_name=COLLECTION_NAME, points=points)
+            flush_batch()
             
             save_hashes(hashes)
             indexing_status["running"] = False
@@ -277,9 +307,12 @@ def main():
         """Инкрементальная индексация в фоне"""
         global indexing_status
         
+        start_time = time.time()
         indexing_status = {
-            "running": True, "mode": "incremental", "total_files": 0, "processed_files": 0,
-            "total_chunks": 0, "speed": 0, "elapsed": 0, "eta": None, "error": None, "last_file": ""
+            "running": True, "mode": "incremental", "started_at": start_time,
+            "total_files": 0, "processed_files": 0,
+            "total_chunks": 0, "speed": 0, "elapsed": 0, "eta": None, "eta_time": None,
+            "error": None, "last_file": ""
         }
         
         try:
@@ -289,7 +322,6 @@ def main():
             
             added, updated, deleted = 0, 0, 0
             current_files = set()
-            start_time = time.time()
             max_id = get_collection_count()
             
             # Считаем изменённые файлы
@@ -335,12 +367,14 @@ def main():
                         updated += 1
                     
                     elapsed = time.time() - start_time
+                    eta_sec = round((len(to_process) - i - 1) * elapsed / (i + 1), 0) if i > 0 else None
                     indexing_status.update({
                         "processed_files": i + 1,
                         "total_chunks": added + updated,
                         "elapsed": round(elapsed, 1),
                         "speed": round((i + 1) / elapsed, 1) if elapsed > 0 else 0,
-                        "eta": round((len(to_process) - i - 1) * elapsed / (i + 1), 0) if i > 0 else None
+                        "eta": eta_sec,
+                        "eta_time": time.time() + eta_sec if eta_sec else None,
                     })
                 except Exception as e:
                     print(f"Ошибка {rel_path}: {e}")
@@ -475,7 +509,7 @@ function startPolling(){{
     const s=document.getElementById('status');
     s.style.display='block';
     if(pollInterval) clearInterval(pollInterval);
-    pollInterval = setInterval(updateProgress, 500);
+    pollInterval = setInterval(updateProgress, 5000);
     updateProgress();
 }}
 
@@ -492,16 +526,21 @@ async function updateProgress(){{
         s.style.display='block';
         const pct = data.total_files > 0 ? Math.round(data.processed_files / data.total_files * 100) : 0;
         const mode = data.mode === 'full' ? 'Полная индексация' : 'Обновление';
-        const eta = data.eta ? `~${{Math.round(data.eta)}}с` : '...';
+        const fmtTime = ts => ts ? new Date(ts * 1000).toLocaleTimeString('ru-RU') : '...';
+        const fmtDur = sec => {{if(!sec) return '0:00'; sec=Math.round(sec); const m=Math.floor(sec/60),s=sec%60; return m+':'+(s<10?'0':'')+s;}};
+        const started = fmtTime(data.started_at);
+        const elapsed = fmtDur(data.elapsed);
+        const etaTime = fmtTime(data.eta_time);
         if(data.running){{
             s.style.background='#fff3cd';
             if(data.total_files === 0){{
-                s.innerHTML = `<b>⏳ ${{mode}}</b><div class="stats">Подготовка...</div>`;
+                s.innerHTML = `<b>⏳ ${{mode}}</b><div class="stats">Подготовка... | Начало: ${{started}}</div>`;
             }} else {{
                 s.innerHTML = `<b>⏳ ${{mode}}</b>
 <div class="progress-bar"><div class="progress-fill" style="width:${{pct}}%"></div></div>
-<div class="stats">Файлов: ${{data.processed_files}}/${{data.total_files}} (${{pct}}%) | Чанков: ${{data.total_chunks}} | Скорость: ${{data.speed}}/с | Осталось: ${{eta}}</div>
-<div class="stats" style="font-size:11px;color:#999">${{data.last_file}}</div>`;
+<div class="stats">Файлов: ${{data.processed_files}}/${{data.total_files}} (${{pct}}%) | Чанков: ${{data.total_chunks}} | Скорость: ${{data.speed}}/с</div>
+<div class="stats">Начало: ${{started}} | Прошло: ${{elapsed}} | Конец: ${{etaTime}}</div>
+<div class="stats" style="font-size:11px;color:#999">${{data.last_file}} ${{data.status_detail ? '(' + data.status_detail + ')' : ''}}</div>`;
             }}
             if(!pollInterval) startPolling();
         }} else if(data.error){{
@@ -577,7 +616,9 @@ updateProgress();
             return
         
         count = get_collection_count()
-        if count == 0:
+        old_hashes = load_hashes()
+        
+        if count == 0 or not old_hashes:
             print("Индекс пуст, запускаю полную индексацию...")
             full_reindex(args.source)
         else:
@@ -597,7 +638,7 @@ updateProgress();
     threading.Thread(target=periodic_check, daemon=True).start()
 
     print(f"Сервер на http://localhost:{args.port}")
-    uvicorn.run(app, host="0.0.0.0", port=args.port)
+    uvicorn.run(app, host="0.0.0.0", port=args.port, log_level="warning")
 
 
 if __name__ == "__main__":

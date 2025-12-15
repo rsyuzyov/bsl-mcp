@@ -25,10 +25,12 @@ def main():
 
     # Тяжёлые импорты только после проверки аргументов
     import os
+    import re
     from pathlib import Path
     from typing import Any
 
     import faiss
+    import pymorphy3
     import uvicorn
     from fastapi import FastAPI
     from fastapi.responses import HTMLResponse
@@ -36,6 +38,9 @@ def main():
     from llama_index.core.node_parser import SentenceSplitter
     from llama_index.embeddings.huggingface import HuggingFaceEmbedding
     from llama_index.vector_stores.faiss import FaissVectorStore
+
+    # Морфологический анализатор для русского
+    morph = pymorphy3.MorphAnalyzer()
 
     # CPU embeddings — мультиязычная модель для русского и 1С
     print("Загрузка модели эмбеддингов...")
@@ -81,7 +86,57 @@ def main():
     except:
         index = build_index(args.source, args.index)
 
-    retriever = index.as_retriever(similarity_top_k=5)
+    retriever = index.as_retriever(similarity_top_k=10)
+
+    # Хранилище документов для keyword поиска
+    all_nodes = list(index.docstore.docs.values())
+
+    def normalize(text: str) -> str:
+        """Приводит слова к нормальной форме (лемматизация)"""
+        words = re.findall(r'[а-яёa-z0-9]+', text.lower())
+        return ' '.join(morph.parse(w)[0].normal_form for w in words)
+
+    def hybrid_search(query: str, top_k: int = 5):
+        """Гибридный поиск: keyword (по имени файла и тексту) + семантика"""
+        query_lower = query.lower()
+        query_normalized = normalize(query)
+        
+        # 1. Keyword поиск — точное и нормализованное совпадение
+        keyword_results = []
+        for node in all_nodes:
+            file_path = node.metadata.get("file_path", "").lower()
+            text = node.text.lower()
+            
+            # Точное совпадение в имени файла — высший приоритет
+            if query_lower in file_path:
+                keyword_results.append({"node": node, "score": 2.0, "match": "filename"})
+            # Точное совпадение в тексте
+            elif query_lower in text:
+                keyword_results.append({"node": node, "score": 1.5, "match": "text"})
+            # Нормализованное совпадение (стемминг)
+            elif query_normalized in normalize(file_path):
+                keyword_results.append({"node": node, "score": 1.8, "match": "filename_stem"})
+            elif query_normalized in normalize(text):
+                keyword_results.append({"node": node, "score": 1.3, "match": "text_stem"})
+        
+        # 2. Семантический поиск
+        semantic_nodes = retriever.retrieve(query)
+        semantic_results = [
+            {"node": n.node, "score": n.score, "match": "semantic"}
+            for n in semantic_nodes
+        ]
+        
+        # 3. Объединяем: keyword результаты первыми
+        seen_ids = set()
+        combined = []
+        
+        for r in keyword_results + semantic_results:
+            node_id = r["node"].node_id
+            if node_id not in seen_ids:
+                seen_ids.add(node_id)
+                combined.append(r)
+        
+        return combined[:top_k]
 
     # MCP сервер
     app = FastAPI()
@@ -108,18 +163,24 @@ r.innerHTML=data.map(d=>`<div class="result"><span class="score">${d.score.toFix
     @app.post("/mcp/tools/1c_search")
     async def mcp_search(request: dict) -> dict[str, Any]:
         query = request["params"]["query"]
-        nodes = retriever.retrieve(query)
-        results = [{"score": n.score, "file": n.node.metadata.get("file_path", ""), "text": n.node.text[:500]} for n in nodes]
+        results = hybrid_search(query)
+        formatted = [
+            {"score": r["score"], "match": r["match"], "file": r["node"].metadata.get("file_path", ""), "text": r["node"].text[:500]}
+            for r in results
+        ]
         return {
-            "content": [{"type": "text", "text": str(results)}],
+            "content": [{"type": "text", "text": str(formatted)}],
             "isError": False
         }
 
     @app.get("/search")
     async def search_get(q: str) -> list[dict[str, Any]]:
         """GET /search?q=запрос — для тестирования в браузере"""
-        nodes = retriever.retrieve(q)
-        return [{"score": n.score, "file": n.node.metadata.get("file_path", ""), "text": n.node.text[:500]} for n in nodes]
+        results = hybrid_search(q)
+        return [
+            {"score": r["score"], "match": r["match"], "file": r["node"].metadata.get("file_path", ""), "text": r["node"].text[:500]}
+            for r in results
+        ]
 
     @app.get("/health")
     async def health():

@@ -11,6 +11,7 @@ PACKAGES = [
     "fastapi",
     "uvicorn",
     "sentence-transformers",
+    "pymorphy3",
 ]
 
 def main():

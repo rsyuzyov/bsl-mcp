@@ -37,10 +37,13 @@ def main():
     from llama_index.embeddings.huggingface import HuggingFaceEmbedding
     from llama_index.vector_stores.faiss import FaissVectorStore
 
-    # CPU embeddings
+    # CPU embeddings — мультиязычная модель для русского и 1С
     print("Загрузка модели эмбеддингов...")
-    Settings.embed_model = HuggingFaceEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2")
-    Settings.node_parser = SentenceSplitter(chunk_size=512, chunk_overlap=50)
+    Settings.embed_model = HuggingFaceEmbedding(
+        model_name="intfloat/multilingual-e5-small",
+        query_instruction="query: ",  # e5 требует префикс для запросов
+    )
+    Settings.node_parser = SentenceSplitter(chunk_size=1024, chunk_overlap=100)
 
     # Проверяем source
     if not os.path.exists(args.source):
@@ -63,7 +66,7 @@ def main():
         print(f"Загружено {len(docs)} файлов")
         print("Создание векторного индекса (может занять несколько минут)...")
 
-        vector_store = FaissVectorStore(faiss.IndexFlatL2(384))
+        vector_store = FaissVectorStore(faiss.IndexFlatIP(384))  # cosine similarity
         storage_context = StorageContext.from_defaults(vector_store=vector_store)
         index = VectorStoreIndex.from_documents(docs, storage_context=storage_context, show_progress=True)
         index.storage_context.persist(index_dir)
@@ -113,7 +116,7 @@ r.innerHTML=data.map(d=>`<div class="result"><span class="score">${d.score.toFix
         }
 
     @app.get("/search")
-    async def search_get(q: str) -> dict[str, Any]:
+    async def search_get(q: str) -> list[dict[str, Any]]:
         """GET /search?q=запрос — для тестирования в браузере"""
         nodes = retriever.retrieve(q)
         return [{"score": n.score, "file": n.node.metadata.get("file_path", ""), "text": n.node.text[:500]} for n in nodes]

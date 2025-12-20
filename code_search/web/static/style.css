@@ -183,6 +183,31 @@ body {
     box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
 }
 
+.input-group {
+    display: flex;
+    align-items: stretch;
+    width: 100%;
+}
+
+.input-group .form-control {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    flex: 1;
+}
+
+.input-group .btn {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    margin-left: -1px;
+    border-color: var(--border-color);
+    background: #f8f9fa;
+    color: var(--text-color);
+}
+
+.input-group .btn:hover {
+    background: #e9ecef;
+}
+
 /* Tables */
 .table-container {
     width: 100%;
@@ -330,4 +355,37 @@ tr:last-child td {
     font-size: 0.95rem;
     color: var(--text-color);
     line-height: 1.5;
+}
+
+/* Input with internal action button */
+.input-action-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.input-action-wrapper .form-control {
+    padding-right: 2.5rem;
+}
+
+.input-action-wrapper .btn-action {
+    position: absolute;
+    right: 0.25rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    padding: 0.25rem;
+    cursor: pointer;
+    color: var(--text-muted);
+    border-radius: 0.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: calc(100% - 0.5rem);
+    width: 2rem;
+}
+
+.input-action-wrapper .btn-action:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+    color: var(--text-color);
 }

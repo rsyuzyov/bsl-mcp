@@ -8,9 +8,8 @@
 
 <!-- Toolbar / Add Button (Optional, can be a modal trigger) -->
 <div class="d-flex justify-between align-center mb-3">
-    <div class="search-box" style="margin-bottom: 0; width: 300px;">
+    <div style="margin-bottom: 0; width: 300px;">
         <input type="text" class="form-control" placeholder="Поиск конфигураций...">
-        <span class="search-icon">🔍</span>
     </div>
 
     <!-- Assuming we have a modal or form to add. For now, simple form toggle or link? 
@@ -39,18 +38,33 @@
             </div>
             <div>
                 <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Папка исходников</label>
-                <div class="d-flex gap-2">
+                <div class="input-action-wrapper">
                     <input type="text" name="source_dir" id="source_dir" class="form-control" required
                         placeholder="C:\src\zup">
-                    <button type="button" class="btn" onclick="openDirPicker('source_dir')">...</button>
+                    <button type="button" class="btn-action" onclick="openDirPicker('source_dir')"
+                        title="Выбрать папку">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="1"></circle>
+                            <circle cx="19" cy="12" r="1"></circle>
+                            <circle cx="5" cy="12" r="1"></circle>
+                        </svg>
+                    </button>
                 </div>
             </div>
             <div>
                 <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Папка индекса</label>
-                <div class="d-flex gap-2">
+                <div class="input-action-wrapper">
                     <input type="text" name="index_dir" id="index_dir" class="form-control" required
                         placeholder="C:\indexes\zup">
-                    <button type="button" class="btn" onclick="openDirPicker('index_dir')">...</button>
+                    <button type="button" class="btn-action" onclick="openDirPicker('index_dir')" title="Выбрать папку">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="1"></circle>
+                            <circle cx="19" cy="12" r="1"></circle>
+                            <circle cx="5" cy="12" r="1"></circle>
+                        </svg>
+                    </button>
                 </div>
             </div>
 
@@ -93,6 +107,15 @@
         </div>
         <div class="d-flex gap-2 mb-3">
             <input type="text" id="picker-path" class="form-control" value="." readonly>
+            <button class="btn btn-icon" onclick="createDir()" title="Создать папку"
+                style="border: 1px solid var(--border-color);">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                    <line x1="12" y1="11" x2="12" y2="17"></line>
+                    <line x1="9" y1="14" x2="15" y2="14"></line>
+                </svg>
+            </button>
             <button class="btn btn-primary" onclick="selectCurrentDir()">Выбрать</button>
         </div>
         <div id="picker-list"
@@ -302,6 +325,34 @@
         closeDirPicker();
     }
 
+    async function createDir() {
+        const name = prompt("Введите имя новой папки:");
+        if (!name) return;
+
+        const currentPath = document.getElementById('picker-path').value;
+        try {
+            const formData = new FormData();
+            formData.append('path', currentPath);
+            formData.append('name', name);
+            const res = await fetch('/api/system/mkdir', { method: 'POST', body: formData });
+
+            if (!res.ok) {
+                alert('Ошибка сервера: ' + res.status);
+                return;
+            }
+
+            const data = await res.json();
+
+            if (data.error) {
+                alert(data.error);
+            } else {
+                loadDir(currentPath); // Reload current dir to see new folder
+            }
+        } catch (e) {
+            alert('Ошибка: ' + e);
+        }
+    }
+
     async function loadDir(path) {
         try {
             const formData = new FormData();
@@ -336,8 +387,8 @@
             list.innerHTML = '';
 
             // Parent dir
-            if (path !== data.current) { # Check specific logic for parent if needed, backend sends '..' in dirs usually if handled
-               // Backend sends '..' in dirs list
+            if (path !== data.current) {
+                // Backend sends '..' in dirs list
             }
 
             data.dirs.forEach(d => {

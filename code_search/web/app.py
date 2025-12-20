@@ -219,4 +219,16 @@ def create_app(ib_manager: IBManager) -> FastAPI:
         except Exception as e:
             return {"error": str(e)}
 
+    @app.post("/api/system/mkdir")
+    async def make_dir(path: str = Form(...), name: str = Form(...)):
+        """Создать папку."""
+        try:
+            p = Path(path).resolve() / name
+            if p.exists():
+                 return {"error": "Папка уже существует"}
+            p.mkdir(parents=False, exist_ok=False)
+            return {"success": True, "path": str(p)}
+        except Exception as e:
+             return {"error": str(e)}
+
     return app

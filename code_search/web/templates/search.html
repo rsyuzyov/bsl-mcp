@@ -14,11 +14,10 @@
             <option value="{{ ib.config.name }}">{{ ib.config.title }}</option>
             {% endfor %}
         </select>
-        <div class="search-box w-100" style="margin-bottom: 0;">
+        <div class="w-100" style="margin-bottom: 0;">
             <input type="text" id="search-input" class="form-control"
                 placeholder="Введите запрос (например: как создать сотрудника)..."
                 onkeypress="if(event.key === 'Enter') doSearch()">
-            <span class="search-icon">🔍</span>
         </div>
         <button class="btn btn-primary" onclick="doSearch()">Найти</button>
     </div>

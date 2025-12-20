@@ -1,0 +1,118 @@
+{% extends "layout.html" %}
+
+{% block page_title %}Поиск{% endblock %}
+{% block page_description %}Поиск по индексированной базе кода. Используйте семантический поиск для нахождения
+фрагментов по смыслу.{% endblock %}
+
+{% block content %}
+
+<div class="card">
+    <div class="d-flex gap-2 mb-3">
+        <select id="ib-select" class="form-control" style="max-width: 200px;">
+            <option value="all">Все базы</option>
+            {% for ib in ibs %}
+            <option value="{{ ib.config.name }}">{{ ib.config.title }}</option>
+            {% endfor %}
+        </select>
+        <div class="search-box w-100" style="margin-bottom: 0;">
+            <input type="text" id="search-input" class="form-control"
+                placeholder="Введите запрос (например: как создать сотрудника)..."
+                onkeypress="if(event.key === 'Enter') doSearch()">
+            <span class="search-icon">🔍</span>
+        </div>
+        <button class="btn btn-primary" onclick="doSearch()">Найти</button>
+    </div>
+
+    <div id="loading" style="display: none; text-align: center; color: var(--text-muted); padding: 1rem;">
+        Поиск...
+    </div>
+
+    <div id="results">
+        <!-- Results will appear here -->
+        <div style="text-align: center; color: var(--text-muted); padding: 2rem;">
+            Введите запрос для поиска
+        </div>
+    </div>
+</div>
+
+<script>
+    async function doSearch() {
+        const query = document.getElementById('search-input').value.trim();
+        if (!query) return;
+
+        const ibName = document.getElementById('ib-select').value;
+        const resultsDiv = document.getElementById('results');
+        const loadingDiv = document.getElementById('loading');
+
+        resultsDiv.innerHTML = '';
+        loadingDiv.style.display = 'block';
+
+        try {
+            let results = [];
+
+            if (ibName === 'all') {
+                // Fetch from all IBs
+                // We need the list of IBs again or just try commonly?
+                // Passing ibs list to template -> I can iterate over options in JS
+                const options = document.getElementById('ib-select').options;
+                const promises = [];
+                for (let i = 0; i < options.length; i++) {
+                    if (options[i].value !== 'all') {
+                        promises.push(
+                            fetch(`/api/ib/${options[i].value}/search?q=${encodeURIComponent(query)}`)
+                                .then(r => r.json())
+                                .then(data => data.map(item => ({ ...item, ib: options[i].text, ib_code: options[i].value })))
+                                .catch(e => [])
+                        );
+                    }
+                }
+                const allResults = await Promise.all(promises);
+                results = allResults.flat();
+            } else {
+                const res = await fetch(`/api/ib/${ibName}/search?q=${encodeURIComponent(query)}`);
+                const data = await res.json();
+                const ibTitle = document.querySelector(`#ib-select option[value="${ibName}"]`).text;
+                results = data.map(item => ({ ...item, ib: ibTitle, ib_code: ibName }));
+            }
+
+            // Sort by score
+            results.sort((a, b) => b.score - a.score);
+
+            loadingDiv.style.display = 'none';
+
+            if (results.length === 0) {
+                resultsDiv.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 2rem;">Ничего не найдено</div>';
+                return;
+            }
+
+            resultsDiv.innerHTML = results.map(item => `
+            <div class="result-item">
+                <div class="d-flex justify-between">
+                    <a href="vscode://file/${item.filename}:${item.line_number}" class="result-title">${item.func_name || 'Code Fragment'}</a>
+                    <span style="font-size: 0.8rem; background: #eee; padding: 2px 6px; border-radius: 4px;">${item.ib}</span>
+                </div>
+                <div class="result-path">${item.filename}:${item.line_number} (Score: ${item.score.toFixed(3)})</div>
+                <div class="result-snippet">
+                    <pre style="margin: 0; white-space: pre-wrap; font-family: 'Consolas', monospace; background: #f8f9fa; padding: 0.5rem; border-radius: 4px;">${escapeHtml(item.content)}</pre>
+                </div>
+            </div>
+        `).join('');
+
+        } catch (e) {
+            loadingDiv.style.display = 'none';
+            resultsDiv.innerHTML = `<div style="color: var(--danger-color); padding: 1rem;">Ошибка: ${e.message}</div>`;
+        }
+    }
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        return text
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+</script>
+
+{% endblock %}

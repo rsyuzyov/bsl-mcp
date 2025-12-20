@@ -27,53 +27,60 @@ def create_app(ib_manager: IBManager) -> FastAPI:
     # BUT "WOW" requires good HTML/CSS.
     # Let's use simple f-strings for HTML generation or simple helper.
     
-    # We will create a better HTML structure in `web/templates`.
     
-    template_dir = Path(__file__).parent / "templates"
+    # Setup templates and static files
+    base_dir = Path(__file__).parent
+    template_dir = base_dir / "templates"
+    static_dir = base_dir / "static"
+    
     template_dir.mkdir(exist_ok=True)
+    static_dir.mkdir(exist_ok=True)
     
-    # Helper to load template
-    def render(name: str, **kwargs):
-        path = template_dir / name
-        if not path.exists():
-            return f"Template {name} not found"
-        html = path.read_text(encoding="utf-8")
-        for k, v in kwargs.items():
-            html = html.replace(f"{{{{ {k} }}}}", str(v))
-        return html
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+    templates = Jinja2Templates(directory=str(template_dir))
 
     @app.get("/", response_class=HTMLResponse)
-    async def index_page():
+    async def index_page(request: Request):
         # List IBs
         ibs = ib_manager.get_all_contexts()
-        # Generate list HTML
-        ib_list_html = ""
-        for ctx in ibs:
-            ib_list_html += f"""
-            <div class="ib-card" onclick="window.location='/ib/{ctx.config.name}'">
-                <h3>{ctx.config.title}</h3>
-                <p>{ctx.config.name}</p>
-                <div class="status">
-                    <span class="bad">●</span> {'Индексация' if ctx.status.running else 'Готов'}
-                </div>
-            </div>
-            """
-        
-        # Load main template
-        # We need to create 'list.html' or update 'index.html'
-        return render("list.html", ib_list=ib_list_html)
+        return templates.TemplateResponse("list.html", {
+            "request": request,
+            "ibs": ibs,
+            "active_page": "config"
+        })
+    
+    @app.get("/search", response_class=HTMLResponse)
+    async def search_page(request: Request):
+        ibs = ib_manager.get_all_contexts()
+        return templates.TemplateResponse("search.html", {
+            "request": request,
+            "ibs": ibs,  # For dropdown if needed
+            "active_page": "search"
+        })
+
+    @app.get("/info", response_class=HTMLResponse)
+    async def info_page(request: Request):
+        return templates.TemplateResponse("info.html", {
+            "request": request,
+            "active_page": "info"
+        })
 
     @app.get("/ib/{name}", response_class=HTMLResponse)
-    async def ib_page(name: str):
+    async def ib_page(request: Request, name: str):
         ctx = ib_manager.get_context(name)
         if not ctx:
             return HTMLResponse("ИБ не найдена", status_code=404)
         
-        return render("ib.html", 
-            ib_name=ctx.config.name, 
-            ib_title=ctx.config.title,
-            collection_count=ctx.engine.get_collection_count()
-        )
+        # Reuse list template or separate? 
+        # For now maybe just redirect to home or show detailed view?
+        # User asked for "Sections: Config, Search, Info". 
+        # Detailed view is probably part of Config logic or Search.
+        # Let's keep it simple for now, maybe render a specific template.
+        return templates.TemplateResponse("ib.html", {
+            "request": request,
+            "ctx": ctx,
+            "active_page": "config"
+        })
 
     @app.post("/api/ib/add")
     async def add_ib(
@@ -175,4 +182,41 @@ def create_app(ib_manager: IBManager) -> FastAPI:
         all_res.sort(key=lambda x: x["score"], reverse=True)
         return {"content": [{"type": "text", "text": str(all_res[:5])}], "isError": False}
         
+    @app.post("/api/system/fs")
+    async def list_fs(path: str = Form(".")):
+        """List directories in path."""
+        try:
+            p = Path(path).resolve()
+            if not p.exists():
+                p = Path(".").resolve()
+            
+            # Windows drives check if parent is same (root)
+            is_root = p.anchor == str(p)
+            
+            dirs = []
+            
+            # If windows and we want to list drives? 
+            # Path("/") on windows goes to current drive root.
+            # To list drives we need specific logic.
+            # Simple workaround: if path is empty or special, show drives.
+            # But python pathlib is tricky with drives.
+            # Let's just list child directories of current path.
+            
+            # Up dir
+            if not is_root:
+                dirs.append({"name": "..", "path": str(p.parent)})
+                
+            for item in p.iterdir():
+                try:
+                    if item.is_dir() and not item.name.startswith("."):
+                        dirs.append({"name": item.name, "path": str(item)})
+                except PermissionError:
+                    continue
+            
+            dirs.sort(key=lambda x: x["name"])
+            
+            return {"current": str(p), "dirs": dirs}
+        except Exception as e:
+            return {"error": str(e)}
+
     return app

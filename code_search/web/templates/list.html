@@ -1,273 +1,445 @@
-<!DOCTYPE html>
-<html lang="ru">
+{% extends "layout.html" %}
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>1C Code Search - Информационные Базы</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg-color: #121212;
-            --card-bg: #1E1E1E;
-            --text-color: #E0E0E0;
-            --accent-color: #BB86FC;
-            --accent-hover: #9955E8;
-            --danger-color: #CF6679;
-            --secondary-text: #A0A0A0;
-            --input-bg: #2C2C2C;
-        }
+{% block page_title %}Конфигурации{% endblock %}
+{% block page_description %}Управление индексами исходного кода (информационными базами). Добавление, удаление и
+мониторинг.{% endblock %}
 
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            margin: 0;
-            padding: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            min-height: 100vh;
-        }
+{% block content %}
 
-        .header {
-            width: 100%;
-            padding: 20px 40px;
-            background-color: rgba(30, 30, 30, 0.8);
-            backdrop-filter: blur(10px);
-            border-bottom: 1px solid #333;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-sizing: border-box;
-        }
-
-        .header h1 {
-            margin: 0;
-            font-size: 24px;
-            font-weight: 600;
-        }
-
-        .container {
-            width: 100%;
-            max-width: 1200px;
-            padding: 40px;
-            box-sizing: border-box;
-        }
-
-        .ib-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 20px;
-        }
-
-        .ib-card {
-            background-color: var(--card-bg);
-            border-radius: 12px;
-            padding: 24px;
-            cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-            border: 1px solid #333;
-        }
-
-        .ib-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
-            border-color: var(--accent-color);
-        }
-
-        .ib-card h3 {
-            margin: 0 0 8px 0;
-            font-size: 18px;
-            color: var(--text-color);
-        }
-
-        .ib-card p {
-            margin: 0 0 16px 0;
-            font-size: 14px;
-            color: var(--secondary-text);
-        }
-
-        .status {
-            font-size: 13px;
-            color: var(--secondary-text);
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .status span.bad {
-            color: #aaa;
-        }
-
-        .status span.good {
-            color: #4CAF50;
-        }
-
-        .add-ib-card {
-            background-color: rgba(255, 255, 255, 0.05);
-            border: 2px dashed #444;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            color: var(--secondary-text);
-        }
-
-        .add-ib-card:hover {
-            border-color: var(--accent-color);
-            color: var(--accent-color);
-            background-color: rgba(187, 134, 252, 0.05);
-        }
-
-        .add-icon {
-            font-size: 32px;
-            margin-bottom: 10px;
-        }
-
-        /* Modal */
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.7);
-            z-index: 1000;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .modal-content {
-            background: var(--card-bg);
-            padding: 32px;
-            border-radius: 16px;
-            width: 500px;
-            max-width: 90%;
-            border: 1px solid #444;
-        }
-
-        .modal.active {
-            display: flex;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            font-size: 14px;
-            color: var(--secondary-text);
-        }
-
-        .form-group input {
-            width: 100%;
-            padding: 12px;
-            background: var(--input-bg);
-            border: 1px solid #444;
-            border-radius: 8px;
-            color: #fff;
-            font-size: 14px;
-            box-sizing: border-box;
-        }
-
-        .form-group input:focus {
-            outline: none;
-            border-color: var(--accent-color);
-        }
-
-        .btn {
-            background: var(--accent-color);
-            color: #121212;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 8px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: filter 0.2s;
-        }
-
-        .btn:hover {
-            filter: brightness(1.1);
-        }
-
-        .btn-secondary {
-            background: #333;
-            color: #fff;
-        }
-
-        .actions {
-            display: flex;
-            justify-content: flex-end;
-            gap: 12px;
-        }
-    </style>
-</head>
-
-<body>
-    <div class="header">
-        <h1>1C Code Search</h1>
-        <div style="font-size: 14px; color: #888;">Multi-base Edition</div>
+<!-- Toolbar / Add Button (Optional, can be a modal trigger) -->
+<div class="d-flex justify-between align-center mb-3">
+    <div class="search-box" style="margin-bottom: 0; width: 300px;">
+        <input type="text" class="form-control" placeholder="Поиск конфигураций...">
+        <span class="search-icon">🔍</span>
     </div>
 
-    <div class="container">
-        <h2 style="margin-bottom: 24px;">Ваши Информационные Базы</h2>
+    <!-- Assuming we have a modal or form to add. For now, simple form toggle or link? 
+         The app.py has /api/ib/add endpoint. Let's make a simple hidden form or generic "Add" button that toggles visibility.
+    -->
+    <button class="btn btn-primary"
+        onclick="document.getElementById('add-form').style.display = document.getElementById('add-form').style.display === 'none' ? 'block' : 'none'"
+        title="Добавить">
+        +
+    </button>
+</div>
 
-        <div class="ib-grid">
-            {{ ib_list }}
+<!-- Add Form (Hidden by default) -->
+<!-- Add Form (Hidden by default) -->
+<div id="add-form" class="card" style="display: none;">
+    <h3 style="margin-top: 0;">Добавить конфигурацию</h3>
+    <form action="/api/ib/add" method="post">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+            <div>
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Имя (Slug)</label>
+                <input type="text" name="name" class="form-control" required placeholder="zup3">
+            </div>
+            <div>
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Заголовок</label>
+                <input type="text" name="title" class="form-control" placeholder="Зарплата и Управление Персоналом">
+            </div>
+            <div>
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Папка исходников</label>
+                <div class="d-flex gap-2">
+                    <input type="text" name="source_dir" id="source_dir" class="form-control" required
+                        placeholder="C:\src\zup">
+                    <button type="button" class="btn" onclick="openDirPicker('source_dir')">...</button>
+                </div>
+            </div>
+            <div>
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Папка индекса</label>
+                <div class="d-flex gap-2">
+                    <input type="text" name="index_dir" id="index_dir" class="form-control" required
+                        placeholder="C:\indexes\zup">
+                    <button type="button" class="btn" onclick="openDirPicker('index_dir')">...</button>
+                </div>
+            </div>
 
-            <div class="ib-card add-ib-card" onclick="openModal()">
-                <div class="add-icon">+</div>
-                <div>Добавить Базу</div>
+            <!-- Models -->
+            <div>
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Модель эмбеддинга</label>
+                <select name="embedding_model" class="form-control">
+                    <option value="cointegrated/rubert-tiny2" selected>cointegrated/rubert-tiny2 (Быстрая, CPU)</option>
+                    <option value="intfloat/multilingual-e5-small">intfloat/multilingual-e5-small (Качественная)
+                    </option>
+                    <option value="ai-forever/sbert_large_nlu_ru">ai-forever/sbert_large_nlu_ru (Тяжелая)</option>
+                </select>
+            </div>
+
+            <!-- Engine -->
+            <div>
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Поисковый движок</label>
+                <select name="engine" class="form-control">
+                    <option value="qdrant" selected>Qdrant (Vector DB)</option>
+                    <option value="lancedb" disabled>LanceDB (Planned)</option>
+                    <option value="chroma" disabled>ChromaDB (Planned)</option>
+                </select>
             </div>
         </div>
+        <div class="text-end">
+            <button type="button" class="btn" onclick="document.getElementById('add-form').style.display='none'"
+                style="margin-right: 0.5rem;">Отмена</button>
+            <button type="submit" class="btn btn-primary">Создать</button>
+        </div>
+    </form>
+</div>
+
+<!-- Dir Picker Modal -->
+<div id="dir-picker"
+    style="display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="width: 600px; max-height: 80vh; display: flex; flex-direction: column; overflow: hidden;">
+        <div class="d-flex justify-between align-center mb-3">
+            <h3 style="margin: 0;">Выбор папки</h3>
+            <button class="btn btn-icon" onclick="closeDirPicker()">✕</button>
+        </div>
+        <div class="d-flex gap-2 mb-3">
+            <input type="text" id="picker-path" class="form-control" value="." readonly>
+            <button class="btn btn-primary" onclick="selectCurrentDir()">Выбрать</button>
+        </div>
+        <div id="picker-list"
+            style="flex-grow: 1; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 4px;"></div>
     </div>
+</div>
 
-    <!-- Modal for Adding IB -->
-    <div class="modal" id="addModal">
-        <div class="modal-content">
-            <h2 style="margin-top: 0;">Добавить ИБ</h2>
-            <form action="/api/ib/add" method="post">
-                <div class="form-group">
-                    <label>ID (латиница)</label>
-                    <input type="text" name="name" required placeholder="zup3">
-                </div>
-                <div class="form-group">
-                    <label>Название</label>
-                    <input type="text" name="title" placeholder="Зарплата и кадры 3.1">
-                </div>
-                <div class="form-group">
-                    <label>Путь к выгрузке (XML)</label>
-                    <input type="text" name="source_dir" required placeholder="C:/repo/zup">
-                </div>
-                <div class="form-group">
-                    <label>Путь к индексу</label>
-                    <input type="text" name="index_dir" required placeholder="./1c-index/zup">
-                </div>
-                <div class="form-group">
-                    <label>Модель (по умолчанию rubert-tiny2)</label>
-                    <input type="text" name="embedding_model" value="cointegrated/rubert-tiny2">
-                </div>
+<!-- Instruction Modal -->
+<div id="instruction-modal"
+    style="display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card"
+        style="width: 700px; max-height: 85vh; display: flex; flex-direction: column; overflow: hidden; padding: 0;">
+        <div class="d-flex justify-between align-center"
+            style="padding: 1rem; border-bottom: 1px solid var(--border-color);">
+            <h3 style="margin: 0;">Подключение MCP</h3>
+            <button class="btn btn-icon" onclick="closeInstruction()">✕</button>
+        </div>
 
-                <div class="actions">
-                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Отмена</button>
-                    <button type="submit" class="btn">Добавить</button>
-                </div>
-            </form>
+        <div style="padding: 1rem; flex-grow: 1; overflow-y: auto;">
+            <p>Выберите клиент для просмотра инструкции подключения конфигурации <b id="inst-ib-name"></b>:</p>
+
+            <div class="tabs"
+                style="display: flex; gap: 0.5rem; border-bottom: 1px solid var(--border-color); margin-bottom: 1rem;">
+                <button class="tab-btn active" onclick="switchTab('claude')">Claude</button>
+                <button class="tab-btn" onclick="switchTab('cursor')">Cursor</button>
+                <button class="tab-btn" onclick="switchTab('kiro')">Kiro</button>
+                <button class="tab-btn" onclick="switchTab('antigravity')">Antigravity</button>
+            </div>
+
+            <div id="tab-claude" class="tab-content">
+                <p>Добавьте в <code>claude_desktop_config.json</code>:</p>
+                <pre
+                    style="background: #f4f4f4; padding: 1rem; border-radius: 4px; overflow-x: auto;"><code id="code-claude"></code></pre>
+            </div>
+
+            <div id="tab-cursor" class="tab-content" style="display: none;">
+                <p>1. Open <b>Cursor Settings</b> > <b>Features</b> > <b>MCP</b>.</p>
+                <p>2. Click <b>Add New MCP Server</b>.</p>
+                <p>3. Select Type: <code>stdio</code> (или <code>SSE</code> если доступно).</p>
+                <p>4. Name: <code id="name-cursor"></code></p>
+                <p>5. Command:</p>
+                <pre
+                    style="background: #f4f4f4; padding: 1rem; border-radius: 4px; overflow-x: auto;"><code id="code-cursor"></code></pre>
+            </div>
+
+            <div id="tab-kiro" class="tab-content" style="display: none;">
+                <p>Настройки для Kiro:</p>
+                <pre
+                    style="background: #f4f4f4; padding: 1rem; border-radius: 4px; overflow-x: auto;"><code id="code-kiro"></code></pre>
+            </div>
+
+            <div id="tab-antigravity" class="tab-content" style="display: none;">
+                <p>Для Antigravity Agent добавьте в конфигурацию:</p>
+                <pre
+                    style="background: #f4f4f4; padding: 1rem; border-radius: 4px; overflow-x: auto;"><code id="code-antigravity"></code></pre>
+            </div>
+        </div>
+
+        <div style="padding: 1rem; border-top: 1px solid var(--border-color); text-align: right;">
+            <button class="btn" onclick="closeInstruction()">Закрыть</button>
         </div>
     </div>
+</div>
 
-    <script>
-        function openModal() {
-            document.getElementById('addModal').classList.add('active');
-        }
-        function closeModal() {
-            document.getElementById('addModal').classList.remove('active');
-        }
-    </script>
-</body>
+<style>
+    .tab-btn {
+        background: none;
+        border: none;
+        padding: 0.5rem 1rem;
+        cursor: pointer;
+        opacity: 0.7;
+        font-weight: 500;
+        border-bottom: 2px solid transparent;
+    }
 
-</html>
+    .tab-btn.active {
+        opacity: 1;
+        border-bottom-color: var(--primary-color);
+        color: var(--primary-color);
+    }
+</style>
+<div class="card" style="padding: 0;">
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Имя / Заголовок</th>
+                    <th>Пути (Source / Index)</th>
+                    <th>Модель</th>
+                    <th>Статус</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ctx in ibs %}
+                <tr>
+                    <td>
+                        <div style="font-weight: 600; color: var(--text-color); margin-bottom: 0.25rem;">
+                            <a href="/ib/{{ ctx.config.name }}" style="text-decoration: none; color: inherit;">
+                                {{ ctx.config.title }}
+                            </a>
+                        </div>
+                        <div style="font-size: 0.85rem; color: var(--text-muted);">{{ ctx.config.name }}</div>
+                    </td>
+                    <td>
+                        <div style="font-size: 0.85rem; color: var(--text-muted); font-family: monospace;">
+                            Src: {{ ctx.config.source_dir }}<br>
+                            Idx: {{ ctx.config.index_dir }}
+                        </div>
+                    </td>
+                    <td>
+                        <span style="font-size: 0.9rem;">{{ ctx.config.embedding_model }}</span>
+                    </td>
+                    <td>
+                        <div class="status-badge">
+                            {% if ctx.status.running %}
+                            <span class="status-dot running"></span> Индексация ({{ ctx.status.files_processed }} / {{
+                            ctx.status.total_files }})
+                            {% else %}
+                            <span class="status-dot active"></span> Активен
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <!-- Connection Instructions -->
+                        <button class="btn btn-icon" title="Инструкция для подключения"
+                            onclick="showInstruction('{{ ctx.config.name }}')"
+                            style="border: 1px solid var(--border-color);">
+                            <span style="font-weight: bold;">?</span>
+                        </button>
+                        <!-- Helper form to delete -->
+                        <form action="/api/ib/{{ ctx.config.name }}/delete" method="post"
+                            onsubmit="return confirm('Удалить {{ ctx.config.name }}?');">
+                            <button type="submit" class="btn btn-danger btn-icon" title="Удалить">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="3 6 5 6 21 6"></polyline>
+                                    <path
+                                        d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
+                                    </path>
+                                </svg>
+                            </button>
+                        </form>
+                        <!-- Reindex buttons -->
+                        <button class="btn btn-icon" title="Полный реиндекс"
+                            onclick="reindex('{{ ctx.config.name }}', 'full')"
+                            style="border: 1px solid var(--border-color);">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="23 4 23 10 17 10"></polyline>
+                                <polyline points="1 20 1 14 7 14"></polyline>
+                                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15">
+                                </path>
+                            </svg>
+                        </button>
+    </div>
+    </td>
+    </tr>
+    {% endfor %}
+
+    {% if not ibs %}
+    <tr>
+        <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+            Нет добавленных конфигураций
+        </td>
+    </tr>
+    {% endif %}
+    </tbody>
+    </table>
+</div>
+<div style="padding: 1rem; border-top: 1px solid var(--border-color); color: var(--text-muted); font-size: 0.9rem;">
+    Всего записей: {{ ibs|length }}
+</div>
+</div>
+
+<script>
+    async function reindex(name, type) {
+        if (!confirm('Запустить ' + type + ' переиндексацию для ' + name + '?')) return;
+        try {
+            const res = await fetch('/api/ib/' + name + '/reindex/' + type, { method: 'POST' });
+            const data = await res.json();
+            if (data.error) alert(data.error);
+            else location.reload();
+        } catch (e) {
+            alert('Ошибка: ' + e);
+        }
+    }
+
+    // Directory Picker Logic
+    let currentPickerTarget = null;
+
+    function openDirPicker(targetId) {
+        currentPickerTarget = targetId;
+        document.getElementById('dir-picker').style.display = 'flex';
+        loadDir('.');
+    }
+
+    function closeDirPicker() {
+        document.getElementById('dir-picker').style.display = 'none';
+        currentPickerTarget = null;
+    }
+
+    function selectCurrentDir() {
+        if (currentPickerTarget) {
+            document.getElementById(currentPickerTarget).value = document.getElementById('picker-path').value;
+        }
+        closeDirPicker();
+    }
+
+    async function loadDir(path) {
+        try {
+            const formData = new FormData();
+            formData.append('path', path);
+            const res = await fetch('/api/system/fs', { method: 'POST', body: formData });
+
+            if (!res.ok) {
+                const errText = await res.text();
+                // Try parsing JSON error
+                try {
+                    const errJson = JSON.parse(errText);
+                    if (errJson.detail) {
+                        alert('Ошибка валидации (422): ' + JSON.stringify(errJson.detail));
+                        return;
+                    }
+                } catch (e) { }
+
+                alert('Ошибка сервера (' + res.status + '): ' + errText);
+                return;
+            }
+
+            const data = await res.json();
+
+            if (data.error) {
+                alert(data.error);
+                return;
+            }
+
+            document.getElementById('picker-path').value = data.current;
+
+            const list = document.getElementById('picker-list');
+            list.innerHTML = '';
+
+            // Parent dir
+            if (path !== data.current) { # Check specific logic for parent if needed, backend sends '..' in dirs usually if handled
+               // Backend sends '..' in dirs list
+            }
+
+            data.dirs.forEach(d => {
+                const item = document.createElement('div');
+                item.style.padding = '0.5rem 1rem';
+                item.style.cursor = 'pointer';
+                item.style.borderBottom = '1px solid #eee';
+                item.style.display = 'flex';
+                item.style.alignItems = 'center';
+                item.style.gap = '0.5rem';
+
+                // Icon
+                let icon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6c757d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>';
+                if (d.name === '..') {
+                    icon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6c757d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>';
+                }
+
+                item.innerHTML = `
+                    ${icon}
+                    <span>${d.name}</span>
+                `;
+
+                item.onclick = () => loadDir(d.path);
+                item.onmouseover = () => item.style.backgroundColor = '#f8f9fa';
+                item.onmouseout = () => item.style.backgroundColor = 'transparent';
+
+                list.appendChild(item);
+            });
+
+        } catch (e) {
+            console.error(e);
+            alert('Ошибка сети или скрипта: ' + e);
+        }
+    }
+
+    // Instruction Modal Logic
+    let currentIBName = '';
+
+    function showInstruction(ibName) {
+        currentIBName = ibName;
+        document.getElementById('inst-ib-name').innerText = ibName;
+        document.getElementById('instruction-modal').style.display = 'flex';
+
+        // Generate Configs
+        const pythonPath = "python"; // Or sys.executable if dynamic
+        const scriptPath = "-m code_search";
+
+        // Claude
+        const claudeConfig = {
+            "mcpServers": {
+                [`bsl-${ibName}`]: {
+                    "command": pythonPath,
+                    "args": ["-m", "code_search"]
+                }
+            }
+        };
+        document.getElementById('code-claude').innerText = JSON.stringify(claudeConfig, null, 2);
+
+        // Cursor
+        document.getElementById('name-cursor').innerText = `bsl-${ibName}`;
+        document.getElementById('code-cursor').innerText = `${pythonPath} ${scriptPath}`;
+
+        // Kiro (Assuming similar to Claude or URL)
+        const kiroConfig = {
+            "name": `bsl-${ibName}`,
+            "type": "stdio",
+            "command": `${pythonPath} ${scriptPath}`
+        };
+        document.getElementById('code-kiro').innerText = JSON.stringify(kiroConfig, null, 2);
+
+        // Antigravity (Assuming hypothetical format)
+        const antiConfig = {
+            "tools": [
+                {
+                    "name": `bsl_search_${ibName}`,
+                    "description": "Search 1C code",
+                    "mcp_server": {
+                        "command": pythonPath,
+                        "args": ["-m", "code_search"]
+                    }
+                }
+            ]
+        };
+        document.getElementById('code-antigravity').innerText = JSON.stringify(antiConfig, null, 2);
+    }
+
+    function closeInstruction() {
+        document.getElementById('instruction-modal').style.display = 'none';
+    }
+
+    function switchTab(tabName) {
+        document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+        document.getElementById('tab-' + tabName).style.display = 'block';
+
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+        // Find button by onclick, simplified:
+        const buttons = document.querySelectorAll('.tab-btn');
+        if (tabName === 'claude') buttons[0].classList.add('active');
+        if (tabName === 'cursor') buttons[1].classList.add('active');
+        if (tabName === 'kiro') buttons[2].classList.add('active');
+        if (tabName === 'antigravity') buttons[3].classList.add('active');
+    }
+</script>
+
+{% endblock %}

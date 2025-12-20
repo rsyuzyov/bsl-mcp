@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ ib_title }} - Поиск</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #121212;
+            --card-bg: #1E1E1E;
+            --text-color: #E0E0E0;
+            --accent-color: #BB86FC;
+            --accent-hover: #9955E8;
+            --border-color: #333;
+            --search-bg: #2C2C2C;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 280px;
+            background-color: #171717;
+            border-right: 1px solid var(--border-color);
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            flex-shrink: 0;
+        }
+
+        .main {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .search-area {
+            padding: 40px;
+            width: 100%;
+            max-width: 900px;
+            margin: 0 auto;
+            flex-shrink: 0;
+        }
+
+        .search-box {
+            position: relative;
+            width: 100%;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 16px 20px;
+            font-size: 18px;
+            background: var(--search-bg);
+            border: 1px solid #444;
+            border-radius: 12px;
+            color: #fff;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+
+        .results-area {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 0 40px 40px 40px;
+        }
+
+        .results-container {
+            max-width: 900px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .result-item {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        .result-item h4 {
+            margin: 0 0 8px 0;
+            font-size: 16px;
+            color: var(--accent-color);
+            word-break: break-all;
+        }
+
+        .result-meta {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 12px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .result-snippet {
+            font-size: 14px;
+            line-height: 1.5;
+            color: #ccc;
+            white-space: pre-wrap;
+            font-family: 'Consolas', 'Monaco', monospace;
+            background: #121212;
+            padding: 10px;
+            border-radius: 4px;
+            max-height: 200px;
+            overflow: hidden;
+        }
+
+        .btn {
+            background: #333;
+            color: white;
+            border: none;
+            padding: 10px;
+            width: 100%;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-bottom: 8px;
+            text-align: left;
+            transition: background 0.2s;
+        }
+
+        .btn:hover {
+            background: #444;
+        }
+
+        .btn-danger {
+            color: #CF6679;
+        }
+
+        .btn-primary {
+            background: var(--accent-color);
+            color: #121212;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .btn-primary:hover {
+            filter: brightness(1.1);
+            background: var(--accent-color);
+        }
+
+        .progress-bar {
+            height: 4px;
+            background: #333;
+            border-radius: 2px;
+            margin-top: 10px;
+            overflow: hidden;
+            display: none;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--accent-color);
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        .status-text {
+            font-size: 12px;
+            color: #888;
+            margin-top: 5px;
+            min-height: 15px;
+        }
+    </style>
+</head>
+
+<body>
+    <div style="display: flex; height: 100%;">
+        <div class="sidebar">
+            <h2 style="margin: 0; font-size: 20px;">{{ ib_title }}</h2>
+            <div style="font-size: 12px; color: #888; margin-top: -15px;">{{ ib_name }}</div>
+
+            <div style="margin-top: 20px;">
+                <div style="font-size: 12px; text-transform: uppercase; color: #666; margin-bottom: 10px;">Статус</div>
+                <div id="chunks-count" style="font-size: 24px; font-weight: 600;">{{ collection_count }} chunks</div>
+                <div class="status-text" id="status-text">Готов</div>
+                <div class="progress-bar" id="progress-bar">
+                    <div class="progress-fill" id="progress-fill"></div>
+                </div>
+            </div>
+
+            <div style="margin-top: auto;">
+                <button class="btn btn-primary" onclick="reindex('incremental')">Обновить (Инкр.)</button>
+                <button class="btn" onclick="reindex('full')">Полная перестройка</button>
+                <div style="height: 20px;"></div>
+                <button class="btn" onclick="window.location='/'">← Назад к списку</button>
+                <form action="/api/ib/{{ ib_name }}/delete" method="post" style="margin-top: 10px;"
+                    onsubmit="return confirm('Удалить ИБ из конфига?');">
+                    <button type="submit" class="btn btn-danger">Удалить ИБ</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="main">
+            <div class="search-area">
+                <div class="search-box">
+                    <input type="text" id="q" class="search-input" placeholder="Поиск кода (Enter)..." autofocus
+                        onkeydown="if(event.key==='Enter') doSearch()">
+                </div>
+            </div>
+            <div class="results-area">
+                <div class="results-container" id="results">
+                    <!-- Results here -->
+                    <div style="text-align: center; color: #555; margin-top: 50px;">Введите запрос для поиска</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const IB_NAME = "{{ ib_name }}";
+
+        async function doSearch() {
+            const query = document.getElementById('q').value;
+            if (!query) return;
+
+            const container = document.getElementById('results');
+            container.innerHTML = '<div style="text-align: center; color: #888;">Поиск...</div>';
+
+            try {
+                const resp = await fetch(`/api/ib/${IB_NAME}/search?q=${encodeURIComponent(query)}`);
+                const data = await resp.json();
+
+                container.innerHTML = '';
+                if (data.length === 0) {
+                    container.innerHTML = '<div style="text-align: center; color: #888;">Ничего не найдено</div>';
+                    return;
+                }
+
+                data.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'result-item';
+
+                    // Highlight logic could be added here
+
+                    div.innerHTML = `
+                        <h4>${item.file}</h4>
+                        <div class="result-meta">
+                            <span>Score: ${item.score.toFixed(2)}</span>
+                            <span>Match: ${item.match}</span>
+                        </div>
+                        <div class="result-snippet">${escapeHtml(item.text)}</div>
+                    `;
+                    container.appendChild(div);
+                });
+
+            } catch (e) {
+                container.innerHTML = `<div style="color: #CF6679;">Ошибка: ${e}</div>`;
+            }
+        }
+
+        function escapeHtml(text) {
+            if (!text) return "";
+            return text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        async function reindex(mode) {
+            if (!confirm(mode === 'full' ? 'Полная перестройка удалит текущий индекс. Продолжить?' : 'Запустить инкрементальное обновление?')) return;
+
+            try {
+                const resp = await fetch(`/api/ib/${IB_NAME}/reindex/${mode}`, { method: 'POST' });
+                const res = await resp.json();
+                if (res.error) alert(res.error);
+            } catch (e) {
+                alert(e);
+            }
+        }
+
+        // Polling status
+        setInterval(async () => {
+            try {
+                const resp = await fetch(`/api/ib/${IB_NAME}/status`);
+                const status = await resp.json();
+
+                document.getElementById('chunks-count').innerText = status.collection_count + ' chunks';
+                const statusText = document.getElementById('status-text');
+                const pBar = document.getElementById('progress-bar');
+                const pFill = document.getElementById('progress-fill');
+
+                if (status.running) {
+                    statusText.innerText = `Индексация: ${status.pct}% (${status.files_indexed}/${status.files_to_index})`;
+                    pBar.style.display = 'block';
+                    pFill.style.width = status.pct + '%';
+                } else {
+                    statusText.innerText = status.error ? `Ошибка: ${status.error}` : 'Готов';
+                    pBar.style.display = 'none';
+                }
+            } catch (e) { }
+        }, 2000);
+
+    </script>
+</body>
+
+</html>

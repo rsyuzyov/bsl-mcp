@@ -3,15 +3,18 @@ import re
 import pymorphy3
 from qdrant_client import QdrantClient
 
-from ..config import COLLECTION_NAME, model_state
+from ..model_manager import ModelManager
 
 
 class HybridSearch:
     """Гибридный поиск: семантический + текстовый."""
 
-    def __init__(self, client: QdrantClient):
+    def __init__(self, client: QdrantClient, collection_name: str, model_name: str):
         self.client = client
+        self.collection_name = collection_name
+        self.model_name = model_name
         self.morph = pymorphy3.MorphAnalyzer()
+        self.model_manager = ModelManager()
 
     def normalize(self, text: str) -> str:
         """Нормализация текста (лемматизация)."""
@@ -20,20 +23,27 @@ class HybridSearch:
 
     def search(self, query: str, top_k: int = 5) -> list[dict]:
         """Выполнить гибридный поиск."""
-        if model_state.loading:
+        model_info = self.model_manager.get_model(self.model_name)
+        
+        if model_info.loading:
             return [{"file": "", "text": "⏳ Модель загружается, подождите...", "score": 0, "match": "loading"}]
-        if model_state.error:
-            return [{"file": "", "text": f"❌ Ошибка: {model_state.error}", "score": 0, "match": "error"}]
+        if model_info.error:
+            return [{"file": "", "text": f"❌ Ошибка: {model_info.error}", "score": 0, "match": "error"}]
         
         query_lower = query.lower()
         query_normalized = self.normalize(query)
         
-        query_embedding = model_state.model.encode(["query: " + query]).tolist()[0]
-        search_results = self.client.query_points(
-            collection_name=COLLECTION_NAME,
-            query=query_embedding,
-            limit=top_k * 2
-        ).points
+        # We need model to be loaded
+        query_embedding = model_info.model.encode(["query: " + query]).tolist()[0]
+        
+        try:
+            search_results = self.client.query_points(
+                collection_name=self.collection_name,
+                query=query_embedding,
+                limit=top_k * 2
+            ).points
+        except Exception as e:
+            return [{"file": "", "text": f"❌ Ошибка поиска: {e}", "score": 0, "match": "error"}]
         
         results = []
         seen_files = set()

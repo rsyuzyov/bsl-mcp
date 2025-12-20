@@ -10,13 +10,16 @@ PACKAGES = [
     "uvicorn",
     "pymorphy3",
     "tqdm",
+    "optimum[onnxruntime]",
+    "PyYAML",
+    "python-multipart",
 ]
 
 def main():
     print("Устанавливаю зависимости...")
     cmd = [sys.executable, "-m", "pip", "install"] + PACKAGES
     subprocess.run(cmd, check=True)
-    print("\nГотово! Запуск: python code-search.py --source ./путь-к-выгрузке-1с")
+    print("\nГотово! Запуск: python -m code_search")
 
 if __name__ == "__main__":
     main()

@@ -1,15 +1,9 @@
 # 1C Code Search MCP
 
-Локальный MCP-сервер для поиска по кодовой базе 1С. Работает на CPU, без видеокарты.
+Локальный MCP-сервер для поиска по кодовой базе 1С.
 
 ## Установка и запуск
 
-```bash
-pip install -r requirements.txt
-python code-search.py --source ./путь-к-выгрузке-1с
-```
-
-Или через install.py:
 ```bash
 python install.py
 python code-search.py --source ./путь-к-выгрузке-1с

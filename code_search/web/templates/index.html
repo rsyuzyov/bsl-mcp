@@ -1,104 +1,288 @@
 <!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Поиск по ИБ {{ config_name }}</title>
-<style>
-body{font-family:system-ui;max-width:900px;margin:40px auto;padding:0 20px}
-input{width:60%;padding:8px;font-size:14px}
-button{padding:6px 12px;font-size:12px;margin:2px;cursor:pointer}
-.result{border:1px solid #ddd;margin:10px 0;padding:15px;border-radius:5px}
-.file{color:#666;font-size:12px}.score{color:#090;font-weight:bold}
-pre{background:#f5f5f5;padding:10px;overflow-x:auto;font-size:13px}
-.btn-full{background:#dc3545;color:#fff;border:none}
-.btn-inc{background:#28a745;color:#fff;border:none}
-#status{margin:10px 0;padding:15px;border-radius:5px;display:none}
-.progress-bar{background:#e9ecef;border-radius:5px;height:20px;margin:10px 0}
-.progress-fill{background:#007bff;height:100%;border-radius:5px;transition:width 0.3s}
-.stats{font-size:13px;color:#666;margin-top:5px}
-.header{display:flex;align-items:center;gap:15px;margin-bottom:20px}
-.header h1{margin:0;font-size:1.3em}
-.dropdown{position:relative;display:inline-block}
-.dropdown-btn{background:#6c757d;color:#fff;border:none;padding:6px 12px;font-size:12px;cursor:pointer;border-radius:3px}
-.dropdown-content{display:none;position:absolute;background:#fff;min-width:140px;box-shadow:0 2px 8px rgba(0,0,0,0.15);z-index:1;border-radius:3px}
-.dropdown-content button{width:100%;text-align:left;padding:8px 12px;border:none;background:none;cursor:pointer;font-size:12px}
-.dropdown-content button:hover{background:#f0f0f0}
-.dropdown:hover .dropdown-content{display:block}
-</style></head>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Поиск по ИБ {{ config_name }}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --sidebar-width: 260px;
+            --primary-color: #0078d4;
+            --bg-color: #ffff;
+            --border-color: #e1dfdd;
+            --text-primary: #323130;
+            --text-secondary: #605e5c;
+            --danger: #d92b2b;
+            --success: #107c10;
+            --hover-bg: #f3f4f6;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: 'Inter', system-ui, sans-serif; background: #fff; color: var(--text-primary); display: flex; height: 100vh; overflow: hidden; }
+        
+        /* Sidebar */
+        .sidebar { width: var(--sidebar-width); background: #fff; border-right: 1px solid #edeff3; display: flex; flex-direction: column; padding: 20px; flex-shrink: 0; }
+        .app-title { font-size: 20px; font-weight: 600; margin-bottom: 25px; color: #1a1a1a; display: flex; align-items: center; gap: 10px; }
+        
+        .server-select { background: var(--hover-bg); padding: 12px; border-radius: 8px; margin-bottom: 25px; font-size: 14px; font-weight: 500; display: flex; justify-content: space-between; align-items: center; cursor: pointer; color: #333; }
+        
+        .nav-menu { list-style: none; padding: 0; margin: 0; flex-grow: 1; }
+        .nav-item { padding: 10px 12px; margin-bottom: 4px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 12px; color: var(--text-secondary); transition: all 0.2s; font-size: 14px; font-weight: 500; }
+        .nav-item:hover { background: var(--hover-bg); color: #000; }
+        .nav-item.active { background: #eff6fc; color: var(--primary-color); }
+        .nav-icon { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; }
+        
+        .sidebar-footer { margin-top: auto; border-top: 1px solid #f0f0f0; padding-top: 15px; }
+        
+        /* Main Content */
+        .main-content { flex-grow: 1; padding: 0; display: flex; flex-direction: column; background: #fff; }
+        .content-scroll { flex-grow: 1; padding: 30px 40px; overflow-y: auto; }
+        
+        .page-header { margin-bottom: 25px; }
+        .page-title { font-size: 24px; font-weight: 600; margin: 0 0 8px 0; color: #1a1a1a; }
+        .page-subtitle { color: var(--text-secondary); font-size: 14px; margin: 0; }
+        
+        /* Search Section */
+        .search-container { position: relative; margin-bottom: 25px; display: flex; gap: 10px; }
+        .search-input { width: 100%; padding: 12px 15px 12px 40px; border: 1px solid #e0e0e0; border-radius: 6px; font-size: 14px; background: #fff; transition: all 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .search-input:focus { outline: none; border-color: var(--primary-color); box-shadow: 0 0 0 2px rgba(0,120,212,0.1); }
+        .search-icon-input { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #999; pointer-events: none; }
+        
+        /* Results */
+        .results-list { display: flex; flex-direction: column; gap: 15px; }
+        .result-item { border: 1px solid #eee; border-radius: 8px; padding: 20px; background: #fff; transition: box-shadow 0.2s; }
+        .result-item:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.05); border-color: #ddd; }
+        .result-header { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 13px; align-items: center; }
+        .result-file { color: var(--text-secondary); font-family: monospace; font-weight: 500; background: #f5f5f5; padding: 2px 6px; border-radius: 4px; }
+        .result-score { color: var(--success); font-weight: 600; font-size: 12px; }
+        .result-code { background: #fafafa; padding: 15px; border-radius: 6px; overflow-x: auto; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; border: 1px solid #f0f0f0; margin: 0; line-height: 1.5; color: #24292e; }
+        
+        /* Settings/Status */
+        .card { border: 1px solid #e1dfdd; border-radius: 8px; padding: 25px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
+        .card-title { font-size: 16px; font-weight: 600; margin-top: 0; margin-bottom: 15px; color: #333; }
+        .btn-group { display: flex; gap: 10px; }
+        .btn { padding: 8px 16px; border-radius: 4px; border: 1px solid transparent; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.2s; display: inline-flex; align-items: center; gap: 8px; }
+        .btn-primary { background: var(--primary-color); color: #fff; border-color: var(--primary-color); }
+        .btn-primary:hover { background: #0063b1; }
+        .btn-danger { background: #fff; color: var(--danger); border-color: #f3ced2; }
+        .btn-danger:hover { background: #fdf2f4; border-color: var(--danger); }
+        
+        /* Progress Bar */
+        .status-container { margin-top: 25px; padding-top: 20px; border-top: 1px solid #eee; display: none; }
+        .progress-track { height: 6px; background: #f3f4f6; border-radius: 3px; overflow: hidden; margin: 12px 0; }
+        .progress-fill { height: 100%; background: var(--primary-color); width: 0%; transition: width 0.3s ease; }
+        .status-meta { font-size: 12px; color: #666; display: flex; justify-content: space-between; font-weight: 500; }
+        .status-badge { display: inline-block; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+        .status-badge.running { background: #eef6ff; color: var(--primary-color); }
+        .status-badge.error { background: #fdf2f4; color: var(--danger); }
+        .status-badge.success { background: #e6ffed; color: var(--success); }
+
+        /* Utils */
+        .section { display: none; transform-origin: top; animation: fadein 0.2s ease; }
+        .section.active { display: block; }
+        @keyframes fadein { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
 <body>
-<div class="header">
-<h1>Поиск по ИБ {{ config_name }}</h1>
-</div>
-<form onsubmit="search();return false"><input id="q" placeholder="Поиск по коду 1С..." autofocus>
-<button>Найти</button>
-<div class="dropdown"><button type="button" class="dropdown-btn">Индексация ▾</button>
-<div class="dropdown-content">
-<button type="button" onclick="reindex('incremental')">Обновить</button>
-<button type="button" onclick="reindex('full')">Пересоздать</button>
-</div></div></form>
-<div id="status"></div>
-<div id="results"></div>
-<script>
-let pollInterval = null;
+    <div class="sidebar">
+        <div class="app-title">BSL Panel</div>
+        
+        <div class="server-select">
+            <span>{{ config_name }}</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        
+        <ul class="nav-menu">
+            <li class="nav-item active" onclick="switchTab('search')" id="nav-search">
+                <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><path d="M21 21l-4.35-4.35"></path></svg>
+                <span>Поиск</span>
+            </li>
+            <li class="nav-item" onclick="switchTab('settings')" id="nav-settings">
+                <svg class="nav-icon" viewBox="0 0 24 24"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"></path><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1Z"></path></svg>
+                <span>Настройка</span>
+            </li>
+        </ul>
+        
+        <div class="sidebar-footer">
+            <div class="nav-item" style="color: var(--danger);">
+                <svg class="nav-icon" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                <span>Выход</span>
+            </div>
+        </div>
+    </div>
 
-async function search(){
-    const q=document.getElementById('q').value;
-    const r=document.getElementById('results');
-    r.innerHTML='Поиск...';
-    const res=await fetch('/search?q='+encodeURIComponent(q));
-    const data=await res.json();
-    r.innerHTML=data.map(d=>`<div class="result"><span class="score">${d.score.toFixed(3)}</span> <span class="match">[${d.match}]</span>
-<div class="file">${d.file}</div><pre>${d.text.replace(/</g,'&lt;')}</pre></div>`).join('')||'Ничего не найдено';
-}
+    <div class="main-content">
+        <div class="content-scroll">
+            <!-- Search Section -->
+            <div id="section-search" class="section active">
+                <div class="page-header">
+                    <h1 class="page-title">Поиск</h1>
+                    <p class="page-subtitle">Поиск по базе кода конфигурации</p>
+                </div>
+                
+                <form onsubmit="search(); return false;" class="search-container">
+                    <svg class="search-icon-input" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><path d="M21 21l-4.35-4.35"></path></svg>
+                    <input id="q" class="search-input" placeholder="Введите поисковый запрос (например: Справочники.Номенклатура)..." autofocus>
+                </form>
+                
+                <div id="results" class="results-list"></div>
+            </div>
 
-async function reindex(mode){
-    const msg=mode==='full'?'Переиндексация удалит весь индекс. Продолжить?':'Обновить индекс?';
-    if(!confirm(msg))return;
-    fetch('/reindex/'+mode,{method:'POST'});
-    startPolling();
-}
+            <!-- Settings Section -->
+            <div id="section-settings" class="section">
+                <div class="page-header">
+                    <h1 class="page-title">Настройка</h1>
+                    <p class="page-subtitle">Управление индексом и системой</p>
+                </div>
+                
+                <div class="card">
+                    <h3 class="card-title">Индексация данных</h3>
+                    <p style="color: #666; margin-bottom: 25px; font-size: 14px; line-height: 1.5;">
+                        Выберите режим обновления поискового индекса. "Обновить" добавит только измененные файлы, "Пересоздать" полностью перестроит базу.
+                    </p>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" onclick="reindex('incremental')">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"></path><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                            Обновить индекс
+                        </button>
+                        <button class="btn btn-danger" onclick="reindex('full')">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"></polyline><polyline points="23 20 23 14 17 14"></polyline><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"></path></svg>
+                            Пересоздать полный индекс
+                        </button>
+                    </div>
+                    
+                    <div id="status" class="status-container"></div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-function startPolling(){
-    const s=document.getElementById('status');
-    s.style.display='block';
-    if(pollInterval) clearInterval(pollInterval);
-    pollInterval = setInterval(updateProgress, 5000);
-    updateProgress();
-}
+    <script>
+        // Init logic
+        let pollInterval = null;
 
-async function updateProgress(){
-    const s=document.getElementById('status');
-    try {
-        const res = await fetch('/indexing-progress');
-        const d = await res.json();
-        if(!d.running && !d.mode){
-            s.style.display='none';
-            if(pollInterval){clearInterval(pollInterval);pollInterval=null;}
-            return;
+        function switchTab(tab) {
+            document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
+            document.getElementById('section-' + tab).classList.add('active');
+            
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            document.getElementById('nav-' + tab).classList.add('active');
         }
-        s.style.display='block';
-        const mode = d.mode === 'full' ? 'Полная индексация' : 'Обновление';
-        if(d.running){
-            s.style.background='#fff3cd';
-            if(d.total_files === 0){
-                s.innerHTML = `<b>⏳ ${mode}</b><div class="stats">Подготовка... | Начало: ${d.started}</div>`;
-            } else {
-                s.innerHTML = `<b>⏳ ${mode}</b>
-<div class="progress-bar"><div class="progress-fill" style="width:${d.pct}%"></div></div>
-<div class="stats">[${d.pct}%] ${d.processed_files}/${d.total_files} | в базе: ${d.collection_count} | проиндексировано: ${d.indexed} | ${d.speed}/с | начало: ${d.started} | прошло: ${d.elapsed} | конец: ${d.eta_time}</div>
-<div class="stats" style="font-size:11px;color:#999">${d.last_file} ${d.status_detail ? '(' + d.status_detail + ')' : ''}</div>`;
+
+        async function search(){
+            const q=document.getElementById('q').value;
+            const r=document.getElementById('results');
+            if(!q.trim()) return;
+            
+            r.innerHTML='<div style="text-align:center;color:#666;padding:40px;">Поиск...</div>';
+            
+            try {
+                const res=await fetch('/search?q='+encodeURIComponent(q));
+                const data=await res.json();
+                
+                if(!data || data.length === 0) {
+                     r.innerHTML='<div style="text-align:center;color:#666;padding:40px;">Ничего не найдено</div>';
+                     return;
+                }
+
+                r.innerHTML=data.map(d=>`
+                <div class="result-item">
+                    <div class="result-header">
+                        <span class="result-file" title="${d.file}">${d.file}</span>
+                        <div>
+                            <span style="color:#999; margin-right:10px; font-size:12px;">${d.match || 'Text'}</span>
+                            <span class="result-score">${d.score.toFixed(3)}</span>
+                        </div>
+                    </div>
+                    <pre class="result-code">${d.text.replace(/</g,'&lt;')}</pre>
+                </div>`).join('');
+            } catch(e) {
+                r.innerHTML='<div style="text-align:center;color:var(--danger);padding:40px;">Ошибка поиска</div>';
             }
-            if(!pollInterval) startPolling();
-        } else if(d.error){
-            s.style.background='#f8d7da';
-            s.innerHTML=`❌ Ошибка: ${d.error}`;
-            if(pollInterval){clearInterval(pollInterval);pollInterval=null;}
-        } else {
-            s.style.background='#d4edda';
-            s.innerHTML=`✅ Готово! Файлов: ${d.processed_files}, в базе: ${d.collection_count}, время: ${d.elapsed}`;
-            if(pollInterval){clearInterval(pollInterval);pollInterval=null;}
         }
-    } catch(e) {
-        console.error(e);
-    }
-}
-setInterval(updateProgress, 5000);
-updateProgress();
-</script></body></html>
+
+        async function reindex(mode){
+            const msg=mode==='full'?'Переиндексация удалит весь индекс. Продолжить?':'Обновить индекс?';
+            if(!confirm(msg))return;
+            try {
+                await fetch('/reindex/'+mode,{method:'POST'});
+                startPolling();
+            } catch(e) {
+                alert('Ошибка отправки запроса');
+            }
+        }
+
+        function startPolling(){
+            const s=document.getElementById('status');
+            s.style.display='block';
+            if(pollInterval) clearInterval(pollInterval);
+            pollInterval = setInterval(updateProgress, 3000);
+            updateProgress();
+        }
+
+        async function updateProgress(){
+            const s=document.getElementById('status');
+            try {
+                const res = await fetch('/indexing-progress');
+                const d = await res.json();
+                
+                if(!d.running && !d.mode && !d.error && !d.processed_files){
+                    s.style.display='none';
+                    if(pollInterval){clearInterval(pollInterval);pollInterval=null;}
+                    return;
+                }
+                
+                s.style.display='block';
+                
+                // Construct Status UI
+                let badgeClass = 'running';
+                let statusText = d.mode === 'full' ? 'Полная индексация' : 'Обновление';
+                let content = '';
+
+                if(d.running){
+                     content = `
+                        <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                            <span class="status-badge running">⏳ ${statusText} запущен</span>
+                            <span style="font-size:12px;color:#666;">${d.chunks_speed || 0}/с</span>
+                        </div>
+                        <div class="progress-track"><div class="progress-fill" style="width:${d.pct}%"></div></div>
+                        <div class="status-meta">
+                            <span>${d.files_indexed} / ${d.files_to_index} файлов</span>
+                            <span>ETA: ${d.eta_time || '?'}</span>
+                        </div>
+                        <div style="font-size:11px;color:#999;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                            ${d.last_file || ''}
+                        </div>
+                     `;
+                     if(!pollInterval) startPolling();
+                } else if(d.error){
+                    content = `
+                        <div class="status-badge error">❌ Ошибка</div>
+                        <div style="margin-top:10px; color:var(--danger); font-size:13px;">${d.error}</div>
+                    `;
+                    if(pollInterval){clearInterval(pollInterval);pollInterval=null;}
+                } else {
+                     content = `
+                        <div class="status-badge success">✅ Готово</div>
+                        <div style="margin-top:10px; font-size:13px; color:var(--success);">
+                            Обработано файлов: ${d.processed_files} <br>
+                            Всего в базе: ${d.collection_count} <br>
+                            Затрачено времени: ${d.elapsed}
+                        </div>
+                     `;
+                     if(pollInterval){clearInterval(pollInterval);pollInterval=null;}
+                }
+                
+                s.innerHTML = content;
+
+            } catch(e) {
+                console.error(e);
+            }
+        }
+        
+        // Initial check
+        setInterval(updateProgress, 5000);
+        updateProgress();
+    </script>
+</body>
+</html>

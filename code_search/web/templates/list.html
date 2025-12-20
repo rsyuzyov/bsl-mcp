@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>1C Code Search - Информационные Базы</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #121212;
+            --card-bg: #1E1E1E;
+            --text-color: #E0E0E0;
+            --accent-color: #BB86FC;
+            --accent-hover: #9955E8;
+            --danger-color: #CF6679;
+            --secondary-text: #A0A0A0;
+            --input-bg: #2C2C2C;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .header {
+            width: 100%;
+            padding: 20px 40px;
+            background-color: rgba(30, 30, 30, 0.8);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-sizing: border-box;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            padding: 40px;
+            box-sizing: border-box;
+        }
+
+        .ib-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .ib-card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 24px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            border: 1px solid #333;
+        }
+
+        .ib-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+            border-color: var(--accent-color);
+        }
+
+        .ib-card h3 {
+            margin: 0 0 8px 0;
+            font-size: 18px;
+            color: var(--text-color);
+        }
+
+        .ib-card p {
+            margin: 0 0 16px 0;
+            font-size: 14px;
+            color: var(--secondary-text);
+        }
+
+        .status {
+            font-size: 13px;
+            color: var(--secondary-text);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status span.bad {
+            color: #aaa;
+        }
+
+        .status span.good {
+            color: #4CAF50;
+        }
+
+        .add-ib-card {
+            background-color: rgba(255, 255, 255, 0.05);
+            border: 2px dashed #444;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: var(--secondary-text);
+        }
+
+        .add-ib-card:hover {
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+            background-color: rgba(187, 134, 252, 0.05);
+        }
+
+        .add-icon {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background: var(--card-bg);
+            padding: 32px;
+            border-radius: 16px;
+            width: 500px;
+            max-width: 90%;
+            border: 1px solid #444;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: var(--secondary-text);
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            background: var(--input-bg);
+            border: 1px solid #444;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+
+        .btn {
+            background: var(--accent-color);
+            color: #121212;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: filter 0.2s;
+        }
+
+        .btn:hover {
+            filter: brightness(1.1);
+        }
+
+        .btn-secondary {
+            background: #333;
+            color: #fff;
+        }
+
+        .actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <h1>1C Code Search</h1>
+        <div style="font-size: 14px; color: #888;">Multi-base Edition</div>
+    </div>
+
+    <div class="container">
+        <h2 style="margin-bottom: 24px;">Ваши Информационные Базы</h2>
+
+        <div class="ib-grid">
+            {{ ib_list }}
+
+            <div class="ib-card add-ib-card" onclick="openModal()">
+                <div class="add-icon">+</div>
+                <div>Добавить Базу</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Adding IB -->
+    <div class="modal" id="addModal">
+        <div class="modal-content">
+            <h2 style="margin-top: 0;">Добавить ИБ</h2>
+            <form action="/api/ib/add" method="post">
+                <div class="form-group">
+                    <label>ID (латиница)</label>
+                    <input type="text" name="name" required placeholder="zup3">
+                </div>
+                <div class="form-group">
+                    <label>Название</label>
+                    <input type="text" name="title" placeholder="Зарплата и кадры 3.1">
+                </div>
+                <div class="form-group">
+                    <label>Путь к выгрузке (XML)</label>
+                    <input type="text" name="source_dir" required placeholder="C:/repo/zup">
+                </div>
+                <div class="form-group">
+                    <label>Путь к индексу</label>
+                    <input type="text" name="index_dir" required placeholder="./1c-index/zup">
+                </div>
+                <div class="form-group">
+                    <label>Модель (по умолчанию rubert-tiny2)</label>
+                    <input type="text" name="embedding_model" value="cointegrated/rubert-tiny2">
+                </div>
+
+                <div class="actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Отмена</button>
+                    <button type="submit" class="btn">Добавить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function openModal() {
+            document.getElementById('addModal').classList.add('active');
+        }
+        function closeModal() {
+            document.getElementById('addModal').classList.remove('active');
+        }
+    </script>
+</body>
+
+</html>

@@ -3,12 +3,12 @@ from dataclasses import dataclass, field
 import time
 
 
-VECTOR_SIZE = 384
-COLLECTION_NAME = "1c_code"
+VECTOR_SIZE = 312
+# COLLECTION_NAME, CHUNK_SIZE, etc. kept if needed, but globals moved to instance mgmt
 CHUNK_SIZE = 1024
 CHUNK_OVERLAP = 100
-CHECK_INTERVAL = 300  # 5 минут
-
+# CHECK_INTERVAL = 300  # Moved to config logic, kept here as default if imported?
+# Usually better to remove if not used.
 
 @dataclass
 class IndexingStatus:
@@ -16,11 +16,13 @@ class IndexingStatus:
     running: bool = False
     mode: str | None = None  # "full" или "incremental"
     started_at: float | None = None
-    total_files: int = 0
-    processed_files: int = 0
-    total_chunks: int = 0  # подготовлено в батче
+    files_to_index: int = 0
+    files_indexed: int = 0
+    chunks_to_index_est: int = 0  # расчётное общее количество (total_bytes / 900)
+    chunks_indexed: int = 0  # сколько чанков уже нарезали
+    chunks_in_db_start: int = 0  # было в базе на начало индексации
     chunks_in_db: int = 0  # реально записано в Qdrant
-    speed: float = 0
+    chunks_speed: float = 0
     elapsed: float = 0
     eta: float | None = None
     eta_time: float | None = None
@@ -33,11 +35,13 @@ class IndexingStatus:
         self.running = True
         self.mode = mode
         self.started_at = time.time()
-        self.total_files = 0
-        self.processed_files = 0
-        self.total_chunks = 0
+        self.files_to_index = 0
+        self.files_indexed = 0
+        self.chunks_to_index_est = 0
+        self.chunks_indexed = 0
+        self.chunks_in_db_start = 0
         self.chunks_in_db = 0
-        self.speed = 0
+        self.chunks_speed = 0
         self.elapsed = 0
         self.eta = None
         self.eta_time = None
@@ -50,12 +54,14 @@ class IndexingStatus:
             "running": self.running,
             "mode": self.mode,
             "started_at": self.started_at,
-            "total_files": self.total_files,
-            "processed_files": self.processed_files,
-            "total_chunks": self.total_chunks,
+            "files_to_index": self.files_to_index,
+            "files_indexed": self.files_indexed,
+            "chunks_to_index_est": self.chunks_to_index_est,
+            "chunks_indexed": self.chunks_indexed,
+            "chunks_in_db_start": self.chunks_in_db_start,
             "chunks_in_db": self.chunks_in_db,
-            "chunks_pending": self.total_chunks - self.chunks_in_db,
-            "speed": self.speed,
+            "chunks_awaiting_insert": self.chunks_indexed - self.chunks_in_db,
+            "chunks_speed": self.chunks_speed,
             "elapsed": self.elapsed,
             "eta": self.eta,
             "eta_time": self.eta_time,
@@ -69,16 +75,16 @@ class IndexingStatus:
         from .utils import format_time, format_duration
         
         elapsed_sec = time.time() - self.started_at if self.started_at else 0
-        pct = round(self.processed_files / self.total_files * 100) if self.total_files > 0 else 0
-        speed = self.chunks_in_db / elapsed_sec if elapsed_sec > 0 else 0
+        pct = round(self.files_indexed / self.files_to_index * 100) if self.files_to_index > 0 else 0
+        chunks_speed = self.chunks_in_db / elapsed_sec if elapsed_sec > 0 else 0
         
         return {
             "pct": pct,
-            "processed_files": self.processed_files,
-            "total_files": self.total_files,
+            "files_indexed": self.files_indexed,
+            "files_to_index": self.files_to_index,
             "collection_count": collection_count,
             "indexed": self.chunks_in_db,
-            "speed": round(speed, 1),
+            "chunks_speed": round(chunks_speed, 1),
             "started": format_time(self.started_at) if self.started_at else "?",
             "elapsed": format_duration(elapsed_sec),
             "eta_time": format_time(self.eta_time) if self.eta_time else "...",
@@ -92,17 +98,4 @@ class IndexingStatus:
     def format_console(self, collection_count: int = 0) -> str:
         """Строка прогресса для консоли."""
         p = self.format_progress(collection_count)
-        return f"[{p['pct']}%] {p['processed_files']}/{p['total_files']} | в базе: {p['collection_count']} | проиндексировано: {p['indexed']} | {p['speed']}/с | начало: {p['started']} | прошло: {p['elapsed']} | конец: {p['eta_time']}"
-
-
-@dataclass
-class ModelState:
-    """Состояние модели эмбеддингов."""
-    model: object = None
-    loading: bool = True
-    error: str | None = None
-
-
-# Глобальные состояния
-indexing_status = IndexingStatus()
-model_state = ModelState()
+        return f"[{p['pct']}%] {p['files_indexed']}/{p['files_to_index']} | в базе: {p['collection_count']} | проиндексировано: {p['indexed']} | {p['chunks_speed']}/с | начало: {p['started']} | прошло: {p['elapsed']} | конец: {p['eta_time']}"

@@ -4,3 +4,6 @@ fastapi
 uvicorn
 pymorphy3
 tqdm
+optimum[onnxruntime]
+PyYAML
+python-multipart

@@ -3,6 +3,10 @@ import time
 import shutil
 import uuid
 from pathlib import Path
+import sys
+
+# Add repo root to path
+sys.path.append(str(Path(__file__).resolve().parent.parent))
 from code_search.model_manager import ModelManager
 from code_search.vector_db.qdrant import QdrantAdapter, VectorPoint
 

@@ -27,29 +27,37 @@ class ModelManager:
                     cls._instance.models = {}  # name -> ModelInfo
         return cls._instance
 
-    def get_model(self, model_name: str) -> ModelInfo:
+    def get_model(self, model_name: str, device: str = "cpu") -> ModelInfo:
         """Получить модель по имени (запускает загрузку если нет)."""
+        cache_key = (model_name, device)
         with self._lock:
-            if model_name not in self.models:
-                self.models[model_name] = ModelInfo(None, None, model_name)
-                threading.Thread(target=self._load_model_worker, args=(model_name,), daemon=True).start()
-            return self.models[model_name]
+            if cache_key not in self.models:
+                self.models[cache_key] = ModelInfo(None, None, model_name)
+                threading.Thread(target=self._load_model_worker, args=(model_name, device), daemon=True).start()
+            return self.models[cache_key]
 
-    def _load_model_worker(self, model_name: str):
+    def _load_model_worker(self, model_name: str, device: str):
         """Фоновая загрузка модели."""
-        info = self.models[model_name]
+        cache_key = (model_name, device)
+        info = self.models[cache_key]
         try:
-            print(f"Загрузка модели {model_name} (ONNX)...")
+            print(f"Загрузка модели {model_name} (ONNX) на {device}...")
             from optimum.onnxruntime import ORTModelForFeatureExtraction
             from transformers import AutoTokenizer
             import torch
             import numpy as np
 
+            provider = "CPUExecutionProvider"
+            if device == "gpu":
+                provider = "CUDAExecutionProvider"
+            elif device == "dml":
+                provider = "DmlExecutionProvider"
+            
             # Load/Export to ONNX
             model = ORTModelForFeatureExtraction.from_pretrained(
                 model_name, 
                 export=True,
-                provider="CPUExecutionProvider"
+                provider=provider
             )
             tokenizer = AutoTokenizer.from_pretrained(model_name)
 

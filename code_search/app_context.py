@@ -79,10 +79,11 @@ class IBManager:
                 index_dir=ib_conf.index_dir,
                 collection_name=f"code_{ib_conf.name}",
                 embedding_model_name=ib_conf.embedding_model,
+                embedding_device=ib_conf.embedding_device,
                 vector_db_type=ib_conf.vector_db
             )
             # Searcher будет инициализирован с engine.db
-            searcher = HybridSearch(engine.db, collection_name=f"code_{ib_conf.name}", model_name=ib_conf.embedding_model)
+            searcher = HybridSearch(engine.db, collection_name=f"code_{ib_conf.name}", model_name=ib_conf.embedding_model, embedding_device=ib_conf.embedding_device)
             
             ctx = IBContext(config=ib_conf, engine=engine, searcher=searcher)
             self.contexts[ib_conf.name] = ctx

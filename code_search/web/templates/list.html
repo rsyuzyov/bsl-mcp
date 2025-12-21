@@ -132,10 +132,7 @@
             style="padding: 1rem; border-bottom: 1px solid var(--border-color);">
             <h3 style="margin: 0;">Подключение MCP</h3>
             <div class="d-flex align-center" style="gap: 1rem;">
-                <label style="font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; gap: 0.5rem;">
-                    <input type="checkbox" id="remote-toggle" onchange="toggleRemote()">
-                    Remote (SSH)
-                </label>
+                <!-- Remote toggle removed -->
                 <button class="btn btn-icon" onclick="closeInstruction()">✕</button>
             </div>
         </div>
@@ -438,7 +435,6 @@
 
     // Instruction Modal Logic
     let currentIBName = '';
-    let isRemote = false;
 
     function showInstruction(ibName) {
         currentIBName = ibName;
@@ -448,87 +444,46 @@
     }
 
     function toggleRemote() {
-        isRemote = document.getElementById('remote-toggle').checked;
+        // Legacy: Remote toggle removed, always network/SSE
         renderInstructions();
     }
 
     function renderInstructions() {
-        const pythonPath = SERVER_CONFIG.pythonPath;
-        const repoPath = SERVER_CONFIG.repoPath;
         const ibName = currentIBName;
-
-        // Prepare Command parts
-        let command = pythonPath;
-        let args = ["-m", "code_search"];
-        let env = { "PYTHONPATH": repoPath };
-
-        if (isRemote) {
-            // SSH Mode
-            // We wrap the command to set environment variables on the remote side
-            // format: ssh user@host "export PYTHONPATH=...; /path/to/python -m code_search"
-            // Check if server is likely Windows (Drive letter)
-            const isWindows = repoPath.match(/^[a-zA-Z]:/);
-            let remoteCmd = '';
-
-            if (isWindows) {
-                // Windows (CMD)
-                remoteCmd = `set PYTHONPATH=${repoPath} && "${pythonPath}" -m code_search`;
-            } else {
-                // Linux/Bash
-                remoteCmd = `export PYTHONPATH="${repoPath}"; "${pythonPath}" -m code_search`;
-            }
-
-            command = "ssh";
-            args = ["user@your-server-ip", remoteCmd];
-            env = undefined; // Env is set inside the ssh command string
-        }
+        // Construct SSE URL based on current browser location
+        // e.g. http://localhost:8000/sse or http://192.168.1.5:8000/sse
+        const sseUrl = `${window.location.origin}/sse`;
 
         // Claude
         const claudeConfig = {
             "mcpServers": {
                 [`bsl-${ibName}`]: {
-                    "command": command,
-                    "args": args
+                    "url": sseUrl
                 }
             }
         };
-        if (env) {
-            claudeConfig.mcpServers[`bsl-${ibName}`].env = env;
-        }
         document.getElementById('code-claude').innerText = JSON.stringify(claudeConfig, null, 2);
 
         // Cursor
         document.getElementById('name-cursor').innerText = `bsl-${ibName}`;
-        if (isRemote) {
-            document.getElementById('code-cursor').innerText = `Command: ssh\nArgs: user@your-server-ip "${repoPath}/run_mcp.sh" (Recommended to create a wrapper script)`;
-            // Complex commands in Cursor UI are tricky.
-            // Let's stick to the JSON-like structure or just the command line
-            document.getElementById('code-cursor').innerText = `Command: ${command}\nArgs: ${args.join(' ')}`;
-        } else {
-            document.getElementById('code-cursor').innerText = `Command: ${command}\nArgs: ${args.join(' ')}\nEnv: PYTHONPATH=${repoPath}`;
-        }
+        document.getElementById('code-cursor').innerHTML = `1. Add New MCP Server<br>2. Type: <b>SSE</b><br>3. URL: <code>${sseUrl}</code>`;
 
         // Kiro
         const kiroConfig = {
-            "name": `bsl-${ibName}`,
-            "type": "stdio",
-            "command": `${command} ${args.join(' ')}`
+            "mcpServers": {
+                [`bsl-${ibName}`]: {
+                    "url": sseUrl
+                }
+            }
         };
-        if (env) {
-            kiroConfig.env = env;
-        }
         document.getElementById('code-kiro').innerText = JSON.stringify(kiroConfig, null, 2);
 
-        // Antigravity (Hypothetical)
+        // Antigravity / Generic
         const antiConfig = {
-            "tools": [
+            "mcp_servers": [
                 {
-                    "name": `bsl_search_${ibName}`,
-                    "mcp_server": {
-                        "command": command,
-                        "args": args,
-                        "env": env
-                    }
+                    "name": `bsl-${ibName}`,
+                    "url": sseUrl
                 }
             ]
         };

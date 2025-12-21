@@ -241,4 +241,30 @@ def create_app(ib_manager: IBManager) -> FastAPI:
         except Exception as e:
              return {"error": str(e)}
 
+    # --- MCP Integration ---
+    from ..mcp_server import create_mcp_server
+    from mcp.server.sse import SseServerTransport
+
+    mcp_server = create_mcp_server(ib_manager)
+    sse_transport = SseServerTransport("/messages")
+
+    @app.get("/sse")
+    async def handle_sse(request: Request):
+        try:
+             async with sse_transport.connect_sse(
+                 request.scope, request.receive, request._send
+             ) as streams:
+                 await mcp_server.run(
+                     streams[0], streams[1], 
+                     sse_transport.initialization_options
+                 )
+        except Exception:
+             # Client disconnected or error
+             pass
+
+    @app.post("/messages")
+    async def handle_messages(request: Request):
+        await sse_transport.handle_post_message(request.scope, request.receive, request._send)
+
     return app
+

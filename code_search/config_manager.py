@@ -17,6 +17,7 @@ class IBConfig:
     source_dir: str = ""
     index_dir: str = ""
     embedding_model: str = "cointegrated/rubert-tiny2"
+    embedding_device: str = "cpu"  # cpu, gpu, dml
     vector_db: str = "qdrant"
 
     def __post_init__(self):

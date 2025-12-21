@@ -25,11 +25,12 @@ EMBED_BATCH_SIZE = 64
 class IndexEngine:
     """Движок индексации 1С выгрузки для конкретной ИБ."""
 
-    def __init__(self, source_dir: str, index_dir: str, collection_name: str, embedding_model_name: str, vector_db_type: str = "qdrant", vector_size: int = VECTOR_SIZE):
+    def __init__(self, source_dir: str, index_dir: str, collection_name: str, embedding_model_name: str, embedding_device: str = "cpu", vector_db_type: str = "qdrant", vector_size: int = VECTOR_SIZE):
         self.source_dir = Path(source_dir)
         self.index_dir = Path(index_dir)
         self.collection_name = collection_name
         self.embedding_model_name = embedding_model_name
+        self.embedding_device = embedding_device
         self.vector_db_type = vector_db_type
         self.vector_size = vector_size
         
@@ -42,6 +43,7 @@ class IndexEngine:
         self.db = get_vector_db(self.vector_db_type, str(self.index_dir))
         self._ensure_collection()
         self.model_manager = ModelManager()
+        self.batch_counter = 0
 
     def _ensure_collection(self):
         """Создать коллекцию если не существует."""
@@ -59,7 +61,7 @@ class IndexEngine:
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
         """Получить эмбеддинги текстов."""
-        model_info = self.model_manager.get_model(self.embedding_model_name)
+        model_info = self.model_manager.get_model(self.embedding_model_name, self.embedding_device)
         if model_info.loading:
             # Wait or raise? For background process it's better to wait a bit or raise error
             # But here we assume it's called when we permit indexing.
@@ -166,7 +168,7 @@ class IndexEngine:
             progress_stop = threading.Event()
             def progress_printer():
                 while not progress_stop.is_set():
-                    time.sleep(5)
+                    time.sleep(60)
                     if status.running:
                         self._print_progress(status)
             progress_thread = threading.Thread(target=progress_printer, daemon=True)
@@ -353,7 +355,7 @@ class IndexEngine:
             progress_stop = threading.Event()
             def progress_printer():
                 while not progress_stop.is_set():
-                    time.sleep(5)
+                    time.sleep(60)
                     if status.running:
                         self._print_progress(status)
             progress_thread = threading.Thread(target=progress_printer, daemon=True)
@@ -405,7 +407,10 @@ class IndexEngine:
                 upsert_time = t4 - t3
                 total_time = t4 - t0
                 per_item = (embed_time / len(texts) * 1000) if texts else 0
-                self.logger.info(f"Batch {len(texts)}: Full={total_time:.2f}s | Embed={embed_time:.2f}s ({per_item:.1f}ms/item) | Upsert={upsert_time:.2f}s")
+                
+                self.batch_counter += 1
+                if self.batch_counter % 3 == 0:
+                    self.logger.info(f"Batch {len(texts)}: Full={total_time:.2f}s | Embed={embed_time:.2f}s ({per_item:.1f}ms/item) | Upsert={upsert_time:.2f}s")
                 
                 batch_points = []
                 files_in_batch = []

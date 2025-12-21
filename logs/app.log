@@ -1,61 +1,35 @@
-2025-12-21 13:16:05 - root - INFO - Запуск Multi-IB Code Search...
-2025-12-21 13:16:05 - app.context - INFO - Инициализация ИБ: hrm31...
-2025-12-21 13:16:23 - pymorphy3.opencorpora_dict.wrapper - INFO - Loading dictionaries from C:\Users\rsyuzyov\AppData\Roaming\Python\Python312\site-packages\pymorphy3_dicts_ru\data
-2025-12-21 13:16:23 - pymorphy3.opencorpora_dict.wrapper - INFO - format: 2.4, revision: 417150, updated: 2022-01-08T22:09:24.565962
-2025-12-21 13:16:23 - app.context - INFO - ИБ hrm31 инициализирована
-2025-12-21 13:16:23 - root - INFO - Сервер доступен на http://localhost:8000
-2025-12-21 13:16:37 - ib.hrm31 - INFO - Обнаружены изменения, запуск индексации...
-2025-12-21 13:16:47 - idx.code_hrm31 - INFO - [Incremental] Scanning 36505 files for changes...
-2025-12-21 13:16:53 - idx.code_hrm31 - INFO - Scanned 23902/36505 files...
-2025-12-21 13:16:56 - idx.code_hrm31 - INFO - Scanning done. Found: +36505 ~0 -0
-2025-12-21 13:16:56 - idx.code_hrm31 - INFO - [Incremental] Starting indexing...
-2025-12-21 13:16:56 - idx.code_hrm31 - INFO - Processing file 0: AccumulationRegisters\БухгалтерскиеВзаиморасчетыССотрудниками.xml
-2025-12-21 13:17:02 - idx.code_hrm31 - INFO - [0%] 3/36505 | в базе: 251254 | проиндексировано: 0 | 0.0/с | начало: 13:16:37 | прошло: 0:24 | конец: 05:24:26
-2025-12-21 13:17:07 - idx.code_hrm31 - INFO - [0%] 3/36505 | в базе: 251254 | проиндексировано: 0 | 0.0/с | начало: 13:16:37 | прошло: 0:29 | конец: 05:24:26
-2025-12-21 13:17:12 - idx.code_hrm31 - INFO - [0%] 3/36505 | в базе: 251254 | проиндексировано: 0 | 0.0/с | начало: 13:16:37 | прошло: 0:34 | конец: 05:24:26
-2025-12-21 13:17:17 - idx.code_hrm31 - INFO - [0%] 3/36505 | в базе: 251254 | проиндексировано: 0 | 0.0/с | начало: 13:16:37 | прошло: 0:39 | конец: 05:24:26
-2025-12-21 13:17:20 - idx.code_hrm31 - INFO - Batch 128: Full=23.83s | Embed=22.86s (178.6ms/item) | Upsert=0.97s
-2025-12-21 13:17:22 - idx.code_hrm31 - INFO - [0%] 3/36505 | в базе: 251382 | проиндексировано: 128 | 2.9/с | начало: 13:16:37 | прошло: 0:44 | конец: 05:24:26
-2025-12-21 13:17:24 - idx.code_hrm31 - INFO - Batch 128: Full=4.32s | Embed=3.65s (28.5ms/item) | Upsert=0.67s
-2025-12-21 13:17:27 - idx.code_hrm31 - INFO - [0%] 3/36505 | в базе: 251510 | проиндексировано: 256 | 5.2/с | начало: 13:16:37 | прошло: 0:49 | конец: 05:24:26
-2025-12-21 13:17:29 - idx.code_hrm31 - INFO - Batch 128: Full=4.53s | Embed=3.89s (30.4ms/item) | Upsert=0.63s
-2025-12-21 13:17:32 - idx.code_hrm31 - INFO - [0%] 3/36505 | в базе: 251638 | проиндексировано: 384 | 7.1/с | начало: 13:16:37 | прошло: 0:54 | конец: 05:24:26
-2025-12-21 13:17:33 - idx.code_hrm31 - INFO - Batch 128: Full=4.14s | Embed=3.51s (27.4ms/item) | Upsert=0.62s
-2025-12-21 13:17:37 - idx.code_hrm31 - INFO - [0%] 3/36505 | в базе: 251766 | проиндексировано: 512 | 8.6/с | начало: 13:16:37 | прошло: 0:59 | конец: 05:24:26
-2025-12-21 13:17:38 - idx.code_hrm31 - INFO - Batch 128: Full=4.68s | Embed=4.09s (31.9ms/item) | Upsert=0.60s
-2025-12-21 13:17:42 - idx.code_hrm31 - INFO - [0%] 5/36505 | в базе: 252013 | проиндексировано: 640 | 9.9/с | начало: 13:16:37 | прошло: 1:04 | конец: 15:56:09
-2025-12-21 13:17:42 - idx.code_hrm31 - INFO - Batch 128: Full=3.94s | Embed=3.36s (26.2ms/item) | Upsert=0.59s
-2025-12-21 13:17:47 - idx.code_hrm31 - INFO - Batch 128: Full=4.87s | Embed=4.29s (33.5ms/item) | Upsert=0.59s
-2025-12-21 13:17:47 - idx.code_hrm31 - INFO - [0%] 7/36505 | в базе: 252150 | проиндексировано: 896 | 12.9/с | начало: 13:16:37 | прошло: 1:09 | конец: 10:36:27
-2025-12-21 13:17:52 - idx.code_hrm31 - INFO - [0%] 7/36505 | в базе: 252275 | проиндексировано: 896 | 12.0/с | начало: 13:16:37 | прошло: 1:14 | конец: 10:36:27
-2025-12-21 13:17:52 - idx.code_hrm31 - INFO - Batch 128: Full=5.04s | Embed=4.45s (34.7ms/item) | Upsert=0.60s
-2025-12-21 13:17:57 - idx.code_hrm31 - INFO - [0%] 7/36505 | в базе: 252389 | проиндексировано: 1024 | 12.9/с | начало: 13:16:37 | прошло: 1:19 | конец: 10:36:27
-2025-12-21 13:17:57 - idx.code_hrm31 - INFO - Batch 128: Full=5.07s | Embed=4.44s (34.7ms/item) | Upsert=0.63s
-2025-12-21 13:18:02 - idx.code_hrm31 - INFO - [0%] 7/36505 | в базе: 252508 | проиндексировано: 1152 | 13.6/с | начало: 13:16:37 | прошло: 1:24 | конец: 10:36:27
-2025-12-21 13:18:02 - idx.code_hrm31 - INFO - Batch 128: Full=5.06s | Embed=4.27s (33.4ms/item) | Upsert=0.79s
-2025-12-21 13:18:07 - idx.code_hrm31 - INFO - [0%] 7/36505 | в базе: 252617 | проиндексировано: 1280 | 14.3/с | начало: 13:16:37 | прошло: 1:29 | конец: 10:36:27
-2025-12-21 13:18:07 - idx.code_hrm31 - INFO - Batch 128: Full=5.12s | Embed=4.33s (33.8ms/item) | Upsert=0.80s
-2025-12-21 13:18:12 - idx.code_hrm31 - INFO - [0%] 7/36505 | в базе: 252725 | проиндексировано: 1408 | 14.9/с | начало: 13:16:37 | прошло: 1:34 | конец: 10:36:27
-2025-12-21 13:18:12 - idx.code_hrm31 - INFO - Batch 128: Full=5.01s | Embed=4.40s (34.4ms/item) | Upsert=0.61s
-2025-12-21 13:18:17 - idx.code_hrm31 - INFO - [0%] 7/36505 | в базе: 252833 | проиндексировано: 1536 | 15.4/с | начало: 13:16:37 | прошло: 1:39 | конец: 10:36:27
-2025-12-21 13:18:17 - idx.code_hrm31 - INFO - Batch 128: Full=5.11s | Embed=4.47s (34.9ms/item) | Upsert=0.64s
-2025-12-21 13:18:22 - idx.code_hrm31 - INFO - [0%] 7/36505 | в базе: 252944 | проиндексировано: 1664 | 15.9/с | начало: 13:16:37 | прошло: 1:44 | конец: 10:36:27
-2025-12-21 13:18:22 - idx.code_hrm31 - INFO - Batch 128: Full=5.06s | Embed=4.46s (34.9ms/item) | Upsert=0.59s
-2025-12-21 13:18:27 - idx.code_hrm31 - INFO - [0%] 7/36505 | в базе: 0 | проиндексировано: 1792 | 16.4/с | начало: 13:16:37 | прошло: 1:49 | конец: 10:36:27
-2025-12-21 13:18:27 - idx.code_hrm31 - INFO - Batch 128: Full=5.12s | Embed=4.43s (34.6ms/item) | Upsert=0.69s
-2025-12-21 13:18:32 - idx.code_hrm31 - INFO - [0%] 7/36505 | в базе: 253190 | проиндексировано: 1920 | 16.8/с | начало: 13:16:37 | прошло: 1:54 | конец: 10:36:27
-2025-12-21 13:18:32 - idx.code_hrm31 - INFO - Batch 128: Full=5.07s | Embed=4.35s (33.9ms/item) | Upsert=0.73s
-2025-12-21 13:18:37 - idx.code_hrm31 - INFO - [0%] 7/36505 | в базе: 253302 | проиндексировано: 2048 | 17.1/с | начало: 13:16:37 | прошло: 1:59 | конец: 10:36:27
-2025-12-21 13:18:37 - idx.code_hrm31 - INFO - Batch 128: Full=5.13s | Embed=4.54s (35.5ms/item) | Upsert=0.59s
-2025-12-21 13:18:42 - idx.code_hrm31 - INFO - [0%] 7/36505 | в базе: 253430 | проиндексировано: 2176 | 17.5/с | начало: 13:16:37 | прошло: 2:04 | конец: 10:36:27
-2025-12-21 13:18:43 - idx.code_hrm31 - INFO - Batch 128: Full=5.06s | Embed=4.43s (34.6ms/item) | Upsert=0.63s
-2025-12-21 13:18:47 - idx.code_hrm31 - INFO - [0%] 7/36505 | в базе: 253558 | проиндексировано: 2304 | 17.8/с | начало: 13:16:37 | прошло: 2:09 | конец: 10:36:27
-2025-12-21 13:18:48 - idx.code_hrm31 - INFO - Batch 128: Full=5.25s | Embed=4.33s (33.9ms/item) | Upsert=0.92s
-2025-12-21 13:18:52 - idx.code_hrm31 - INFO - [0%] 7/36505 | в базе: 253686 | проиндексировано: 2432 | 18.1/с | начало: 13:16:37 | прошло: 2:14 | конец: 10:36:27
-2025-12-21 13:18:53 - idx.code_hrm31 - INFO - Batch 128: Full=5.10s | Embed=4.45s (34.8ms/item) | Upsert=0.65s
-2025-12-21 13:18:57 - idx.code_hrm31 - INFO - [0%] 7/36505 | в базе: 253814 | проиндексировано: 2560 | 18.3/с | начало: 13:16:37 | прошло: 2:19 | конец: 10:36:27
-2025-12-21 13:18:58 - idx.code_hrm31 - INFO - Batch 128: Full=4.94s | Embed=4.36s (34.1ms/item) | Upsert=0.58s
-2025-12-21 13:19:02 - idx.code_hrm31 - INFO - [0%] 7/36505 | в базе: 253942 | проиндексировано: 2688 | 18.6/с | начало: 13:16:37 | прошло: 2:24 | конец: 10:36:27
-2025-12-21 13:19:03 - idx.code_hrm31 - INFO - Batch 128: Full=5.11s | Embed=4.50s (35.1ms/item) | Upsert=0.61s
-2025-12-21 13:19:07 - idx.code_hrm31 - INFO - [0%] 7/36505 | в базе: 254070 | проиндексировано: 2816 | 18.8/с | начало: 13:16:37 | прошло: 2:29 | конец: 10:36:27
-2025-12-21 13:19:08 - idx.code_hrm31 - INFO - Batch 128: Full=5.01s | Embed=4.43s (34.6ms/item) | Upsert=0.58s
+2025-12-21 17:24:11 - root - INFO - Запуск Multi-IB Code Search...
+2025-12-21 17:24:11 - app.context - INFO - Инициализация ИБ: hrm31...
+2025-12-21 17:24:32 - pymorphy3.opencorpora_dict.wrapper - INFO - Loading dictionaries from C:\Users\rsyuzyov\repo\bsl-mcp\.venv\Lib\site-packages\pymorphy3_dicts_ru\data
+2025-12-21 17:24:32 - pymorphy3.opencorpora_dict.wrapper - INFO - format: 2.4, revision: 417150, updated: 2022-01-08T22:09:24.565962
+2025-12-21 17:24:32 - app.context - INFO - ИБ hrm31 инициализирована
+2025-12-21 17:24:32 - root - INFO - Сервер доступен на http://localhost:8004
+2025-12-21 17:24:46 - ib.hrm31 - INFO - Обнаружены изменения, запуск индексации...
+2025-12-21 17:24:59 - idx.code_hrm31 - INFO - [Incremental] Scanning 36505 files for changes...
+2025-12-21 17:25:05 - idx.code_hrm31 - INFO - Scanned 19768/36505 files...
+2025-12-21 17:25:10 - idx.code_hrm31 - INFO - Scanned 32078/36505 files...
+2025-12-21 17:25:12 - idx.code_hrm31 - INFO - Scanning done. Found: +36505 ~0 -0
+2025-12-21 17:25:12 - idx.code_hrm31 - INFO - [Incremental] Starting indexing...
+2025-12-21 17:25:12 - idx.code_hrm31 - INFO - Processing file 0: ConfigDumpInfo.xml
+2025-12-21 17:25:14 - idx.code_hrm31 - ERROR - Incremental Index Error: Ошибка модели: No module named 'optimum.onnxruntime'
+Traceback (most recent call last):
+  File "C:\Users\rsyuzyov\repo\bsl-mcp\code_search\indexer\engine.py", line 440, in incremental_reindex
+    flush_batch()
+  File "C:\Users\rsyuzyov\repo\bsl-mcp\code_search\indexer\engine.py", line 377, in flush_batch
+    embeddings = self.embed_texts(texts)
+                 ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\rsyuzyov\repo\bsl-mcp\code_search\indexer\engine.py", line 76, in embed_texts
+    raise RuntimeError(f"Ошибка модели: {model_info.error}")
+RuntimeError: Ошибка модели: No module named 'optimum.onnxruntime'
+2025-12-21 17:25:14 - ib.hrm31 - ERROR - Ошибка в цикле обслуживания: Ошибка модели: No module named 'optimum.onnxruntime'
+Traceback (most recent call last):
+  File "C:\Users\rsyuzyov\repo\bsl-mcp\code_search\app_context.py", line 52, in _maintenance_loop
+    self.engine.incremental_reindex(self.status)
+  File "C:\Users\rsyuzyov\repo\bsl-mcp\code_search\indexer\engine.py", line 440, in incremental_reindex
+    flush_batch()
+  File "C:\Users\rsyuzyov\repo\bsl-mcp\code_search\indexer\engine.py", line 377, in flush_batch
+    embeddings = self.embed_texts(texts)
+                 ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\rsyuzyov\repo\bsl-mcp\code_search\indexer\engine.py", line 76, in embed_texts
+    raise RuntimeError(f"Ошибка модели: {model_info.error}")
+RuntimeError: Ошибка модели: No module named 'optimum.onnxruntime'

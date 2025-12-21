@@ -3,7 +3,8 @@ import os
 from pathlib import Path
 
 # Add current dir to path
-sys.path.append(os.getcwd())
+# Add repo root to path
+sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 try:
     from code_search.web.app import create_app

@@ -9,10 +9,11 @@ from ..vector_db import VectorDB
 class HybridSearch:
     """Гибридный поиск: семантический + текстовый."""
 
-    def __init__(self, db: VectorDB, collection_name: str, model_name: str):
+    def __init__(self, db: VectorDB, collection_name: str, model_name: str, embedding_device: str = "cpu"):
         self.db = db
         self.collection_name = collection_name
         self.model_name = model_name
+        self.embedding_device = embedding_device
         self.morph = pymorphy3.MorphAnalyzer()
         self.model_manager = ModelManager()
 
@@ -23,7 +24,7 @@ class HybridSearch:
 
     def search(self, query: str, top_k: int = 5) -> list[dict]:
         """Выполнить гибридный поиск."""
-        model_info = self.model_manager.get_model(self.model_name)
+        model_info = self.model_manager.get_model(self.model_name, self.embedding_device)
         
         if model_info.loading:
             return [{"file": "", "text": "⏳ Модель загружается, подождите...", "score": 0, "match": "loading"}]

@@ -9,7 +9,8 @@ import time
 from pathlib import Path
 
 # Константы
-VENV_DIR = Path(".venv")
+ROOT_DIR = Path(__file__).parent
+VENV_DIR = ROOT_DIR / ".venv"
 
 def input_with_timeout(prompt, timeout, default):
     print(prompt, end='', flush=True)
@@ -57,7 +58,7 @@ def install_requirements(python_exe, requirements_file):
         sys.exit(1)
 
     print(f"Установка зависимостей из {requirements_file}...")
-    cmd = [str(python_exe), "-m", "pip", "install", "-r", requirements_file]
+    cmd = [str(python_exe), "-m", "pip", "install", "-r", str(requirements_file)]
     print(f"Выполнение: {' '.join(cmd)}")
     subprocess.run(cmd, check=True)
 
@@ -93,8 +94,11 @@ def main():
         print("Выбран режим DirectML (или по умолчанию)")
         requirements_file = "requirements-dml.txt"
 
+    # Full path to req file
+    req_path = ROOT_DIR / requirements_file
+
     try:
-        install_requirements(venv_python, requirements_file)
+        install_requirements(venv_python, req_path)
             
         print("\nГотово! Теперь все пакеты установлены в изолированное окружение .venv")
         print("Для запуска используйте: python run.py")

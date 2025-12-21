@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """Запуск BSL MCP сервера из виртуального окружения."""
-import os
 import sys
 import subprocess
 import platform
@@ -21,8 +20,7 @@ def main():
     if not venv_python.exists():
         print(f"Ошибка: виртуальное окружение не найдено.")
         print(f"Сначала выполните: python install.py")
-        if platform.system() == "Windows":
-            input("Нажмите Enter...")
+        pass
         sys.exit(1)
 
     # Запуск приложения
@@ -34,8 +32,7 @@ def main():
         print("\nОстановлено пользователем.")
     except Exception as e:
         print(f"Ошибка запуска: {e}")
-        if platform.system() == "Windows":
-            input("Нажмите Enter для выхода...")
+        pass
 
 if __name__ == "__main__":
     main()

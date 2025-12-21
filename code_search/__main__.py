@@ -4,6 +4,7 @@
 Поддержка нескольких ИБ.
 Usage: python -m code_search
 """
+import socket
 import threading
 import sys
 import uvicorn
@@ -15,20 +16,32 @@ from .web import create_app
 from .cli import parse_args
 from .logger import setup_logging, get_logger
 
+
+def is_port_in_use(port: int) -> bool:
+    """Проверка занятости порта."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(("127.0.0.1", port)) == 0
+
+
 def main():
     args = parse_args()
     
     # 1. Загрузка конфигурации
     config_mgr = ConfigManager()
     config = config_mgr.load()
-
-    # 2. Настройка логирования
-    logger = setup_logging(config.log_level)
-    logger.info("Запуск Multi-IB Code Search...")
     
-    # 3. Переопределение порта из аргументов
+    # Переопределение порта из аргументов (до проверки!)
     if args.port:
         config.port = args.port
+
+    # 2. Проверка занятости порта ДО тяжёлой инициализации
+    if is_port_in_use(config.port):
+        print(f"Ошибка: порт {config.port} уже занят. Возможно, приложение уже запущено.", file=sys.stderr)
+        sys.exit(1)
+
+    # 3. Настройка логирования
+    logger = setup_logging(config.log_level)
+    logger.info("Запуск Multi-IB Code Search...")
 
     # 4. Инициализация менеджера ИБ
     ib_manager = IBManager(config_mgr)

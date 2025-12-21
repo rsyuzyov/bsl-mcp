@@ -44,7 +44,23 @@ def setup_logging(log_level_str: str = "INFO"):
     log_file = LOG_DIR / "app.log"
     if log_file.exists():
         import datetime
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        import re
+        # Читаем первую строку и извлекаем timestamp начала сессии
+        timestamp = None
+        try:
+            with open(log_file, "r", encoding="utf-8") as f:
+                first_line = f.readline()
+                # Формат: "2025-12-21 18:04:33 - ..."
+                match = re.match(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", first_line)
+                if match:
+                    dt = datetime.datetime.strptime(match.group(1), "%Y-%m-%d %H:%M:%S")
+                    timestamp = dt.strftime("%Y-%m-%d_%H-%M-%S")
+        except Exception:
+            pass
+        
+        if not timestamp:
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        
         new_name = LOG_DIR / f"app_{timestamp}.log"
         try:
             log_file.rename(new_name)

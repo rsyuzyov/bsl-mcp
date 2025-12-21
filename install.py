@@ -13,6 +13,8 @@ PACKAGES = [
     "optimum[onnxruntime]",
     "PyYAML",
     "python-multipart",
+    "lancedb",
+    "chromadb",
 ]
 
 def main():

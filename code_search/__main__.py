@@ -13,35 +13,39 @@ from .config_manager import ConfigManager, IBConfig
 from .app_context import IBManager
 from .web import create_app
 from .cli import parse_args
+from .logger import setup_logging, get_logger
 
 def main():
     args = parse_args()
-    print("Запуск Multi-IB Code Search...")
     
     # 1. Загрузка конфигурации
-    config_mgr = ConfigManager() # loads config.yaml by default or from args (if we extended cli)
+    config_mgr = ConfigManager()
     config = config_mgr.load()
+
+    # 2. Настройка логирования
+    logger = setup_logging(config.log_level)
+    logger.info("Запуск Multi-IB Code Search...")
     
-    # 2. Переопределение порта из аргументов
+    # 3. Переопределение порта из аргументов
     if args.port:
         config.port = args.port
 
-    # 3. Инициализация менеджера ИБ
+    # 4. Инициализация менеджера ИБ
     ib_manager = IBManager(config_mgr)
     ib_manager.initialize()
     
-    # 4. Создание приложения
+    # 5. Создание приложения
     app = create_app(ib_manager)
     
-    print(f"Сервер доступен на http://localhost:{config.port}")
+    logger.info(f"Сервер доступен на http://localhost:{config.port}")
     if not config.ibs:
-        print("Внимание: Список ИБ пуст. Добавьте ИБ через веб-интерфейс.")
+        logger.warning("Список ИБ пуст. Добавьте ИБ через веб-интерфейс.")
 
-    # 5. Запуск сервера
+    # 6. Запуск сервера
     try:
-        uvicorn.run(app, host="0.0.0.0", port=config.port, log_level="warning")
+        uvicorn.run(app, host="0.0.0.0", port=config.port, log_level=config.log_level.lower())
     except KeyboardInterrupt:
-        print("Остановка...")
+        logger.info("Остановка по KeyboardInterrupt...")
         # Stop background threads
         for ctx in ib_manager.get_all_contexts():
             ctx.stop_maintenance()

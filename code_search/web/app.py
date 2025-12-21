@@ -43,10 +43,18 @@ def create_app(ib_manager: IBManager) -> FastAPI:
     async def index_page(request: Request):
         # List IBs
         ibs = ib_manager.get_all_contexts()
+        
+        # Calculate system paths for instructions
+        import sys
+        repo_path = str(Path(__file__).parents[2].resolve())
+        python_path = sys.executable
+
         return templates.TemplateResponse("list.html", {
             "request": request,
             "ibs": ibs,
-            "active_page": "config"
+            "active_page": "config",
+            "repo_path": repo_path,
+            "python_path": python_path
         })
     
     @app.get("/search", response_class=HTMLResponse)
@@ -88,7 +96,8 @@ def create_app(ib_manager: IBManager) -> FastAPI:
         title: str = Form(""), 
         source_dir: str = Form(...),
         index_dir: str = Form(...),
-        embedding_model: str = Form("cointegrated/rubert-tiny2")
+        embedding_model: str = Form("cointegrated/rubert-tiny2"),
+        engine: str = Form("qdrant")
     ):
         try:
             conf = IBConfig(
@@ -96,7 +105,8 @@ def create_app(ib_manager: IBManager) -> FastAPI:
                 title=title or name,
                 source_dir=source_dir,
                 index_dir=index_dir,
-                embedding_model=embedding_model
+                embedding_model=embedding_model,
+                vector_db=engine
             )
             ib_manager.add_ib(conf)
             return RedirectResponse("/", status_code=303)

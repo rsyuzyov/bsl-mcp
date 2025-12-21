@@ -1,16 +1,16 @@
 """Гибридный поиск."""
 import re
 import pymorphy3
-from qdrant_client import QdrantClient
 
 from ..model_manager import ModelManager
+from ..vector_db import VectorDB
 
 
 class HybridSearch:
     """Гибридный поиск: семантический + текстовый."""
 
-    def __init__(self, client: QdrantClient, collection_name: str, model_name: str):
-        self.client = client
+    def __init__(self, db: VectorDB, collection_name: str, model_name: str):
+        self.db = db
         self.collection_name = collection_name
         self.model_name = model_name
         self.morph = pymorphy3.MorphAnalyzer()
@@ -37,11 +37,11 @@ class HybridSearch:
         query_embedding = model_info.model.encode(["query: " + query]).tolist()[0]
         
         try:
-            search_results = self.client.query_points(
-                collection_name=self.collection_name,
-                query=query_embedding,
+            search_results = self.db.search(
+                collection_name=self.collection_name, 
+                vector=query_embedding, 
                 limit=top_k * 2
-            ).points
+            )
         except Exception as e:
             return [{"file": "", "text": f"❌ Ошибка поиска: {e}", "score": 0, "match": "error"}]
         
@@ -49,9 +49,10 @@ class HybridSearch:
         seen_files = set()
         
         for hit in search_results:
-            file_path = hit.payload["file_path"]
-            text = hit.payload.get("text", "")
-            score = hit.score
+            payload = hit["payload"]
+            file_path = payload["file_path"]
+            text = payload.get("text", "")
+            score = hit["score"]
             
             if query_lower in file_path.lower():
                 score += 1.0

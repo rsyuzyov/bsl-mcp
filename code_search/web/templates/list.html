@@ -84,8 +84,8 @@
                 <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Поисковый движок</label>
                 <select name="engine" class="form-control">
                     <option value="qdrant" selected>Qdrant (Vector DB)</option>
-                    <option value="lancedb" disabled>LanceDB (Planned)</option>
-                    <option value="chroma" disabled>ChromaDB (Planned)</option>
+                    <option value="lancedb">LanceDB (Embedded)</option>
+                    <option value="chromadb">ChromaDB (Local)</option>
                 </select>
             </div>
         </div>
@@ -131,7 +131,13 @@
         <div class="d-flex justify-between align-center"
             style="padding: 1rem; border-bottom: 1px solid var(--border-color);">
             <h3 style="margin: 0;">Подключение MCP</h3>
-            <button class="btn btn-icon" onclick="closeInstruction()">✕</button>
+            <div class="d-flex align-center" style="gap: 1rem;">
+                <label style="font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; gap: 0.5rem;">
+                    <input type="checkbox" id="remote-toggle" onchange="toggleRemote()">
+                    Remote (SSH)
+                </label>
+                <button class="btn btn-icon" onclick="closeInstruction()">✕</button>
+            </div>
         </div>
 
         <div style="padding: 1rem; flex-grow: 1; overflow-y: auto;">
@@ -424,50 +430,104 @@
         }
     }
 
+    // Server Paths from Jinja2
+    const SERVER_CONFIG = {
+        repoPath: String.raw`{{ repo_path }}`.replace(/\\/g, '/'), // Force forward slashes for cross-platform compatibility or handle escapes
+        pythonPath: String.raw`{{ python_path }}`.replace(/\\/g, '/')
+    };
+
     // Instruction Modal Logic
     let currentIBName = '';
+    let isRemote = false;
 
     function showInstruction(ibName) {
         currentIBName = ibName;
         document.getElementById('inst-ib-name').innerText = ibName;
         document.getElementById('instruction-modal').style.display = 'flex';
+        renderInstructions();
+    }
 
-        // Generate Configs
-        const pythonPath = "python"; // Or sys.executable if dynamic
-        const scriptPath = "-m code_search";
+    function toggleRemote() {
+        isRemote = document.getElementById('remote-toggle').checked;
+        renderInstructions();
+    }
+
+    function renderInstructions() {
+        const pythonPath = SERVER_CONFIG.pythonPath;
+        const repoPath = SERVER_CONFIG.repoPath;
+        const ibName = currentIBName;
+
+        // Prepare Command parts
+        let command = pythonPath;
+        let args = ["-m", "code_search"];
+        let env = { "PYTHONPATH": repoPath };
+
+        if (isRemote) {
+            // SSH Mode
+            // We wrap the command to set environment variables on the remote side
+            // format: ssh user@host "export PYTHONPATH=...; /path/to/python -m code_search"
+            // Check if server is likely Windows (Drive letter)
+            const isWindows = repoPath.match(/^[a-zA-Z]:/);
+            let remoteCmd = '';
+
+            if (isWindows) {
+                // Windows (CMD)
+                remoteCmd = `set PYTHONPATH=${repoPath} && "${pythonPath}" -m code_search`;
+            } else {
+                // Linux/Bash
+                remoteCmd = `export PYTHONPATH="${repoPath}"; "${pythonPath}" -m code_search`;
+            }
+
+            command = "ssh";
+            args = ["user@your-server-ip", remoteCmd];
+            env = undefined; // Env is set inside the ssh command string
+        }
 
         // Claude
         const claudeConfig = {
             "mcpServers": {
                 [`bsl-${ibName}`]: {
-                    "command": pythonPath,
-                    "args": ["-m", "code_search"]
+                    "command": command,
+                    "args": args
                 }
             }
         };
+        if (env) {
+            claudeConfig.mcpServers[`bsl-${ibName}`].env = env;
+        }
         document.getElementById('code-claude').innerText = JSON.stringify(claudeConfig, null, 2);
 
         // Cursor
         document.getElementById('name-cursor').innerText = `bsl-${ibName}`;
-        document.getElementById('code-cursor').innerText = `${pythonPath} ${scriptPath}`;
+        if (isRemote) {
+            document.getElementById('code-cursor').innerText = `Command: ssh\nArgs: user@your-server-ip "${repoPath}/run_mcp.sh" (Recommended to create a wrapper script)`;
+            // Complex commands in Cursor UI are tricky.
+            // Let's stick to the JSON-like structure or just the command line
+            document.getElementById('code-cursor').innerText = `Command: ${command}\nArgs: ${args.join(' ')}`;
+        } else {
+            document.getElementById('code-cursor').innerText = `Command: ${command}\nArgs: ${args.join(' ')}\nEnv: PYTHONPATH=${repoPath}`;
+        }
 
-        // Kiro (Assuming similar to Claude or URL)
+        // Kiro
         const kiroConfig = {
             "name": `bsl-${ibName}`,
             "type": "stdio",
-            "command": `${pythonPath} ${scriptPath}`
+            "command": `${command} ${args.join(' ')}`
         };
+        if (env) {
+            kiroConfig.env = env;
+        }
         document.getElementById('code-kiro').innerText = JSON.stringify(kiroConfig, null, 2);
 
-        // Antigravity (Assuming hypothetical format)
+        // Antigravity (Hypothetical)
         const antiConfig = {
             "tools": [
                 {
                     "name": `bsl_search_${ibName}`,
-                    "description": "Search 1C code",
                     "mcp_server": {
-                        "command": pythonPath,
-                        "args": ["-m", "code_search"]
+                        "command": command,
+                        "args": args,
+                        "env": env
                     }
                 }
             ]

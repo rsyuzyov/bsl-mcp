@@ -29,6 +29,7 @@ class GlobalConfig:
     """Глобальная конфигурация приложения."""
     port: int = DEFAULT_PORT
     check_interval: int = DEFAULT_CHECK_INTERVAL
+    log_level: str = "INFO"
     ibs: list[IBConfig] = field(default_factory=list)
 
 
@@ -42,6 +43,8 @@ class ConfigManager:
     def load(self) -> GlobalConfig:
         """Загрузить конфигурацию из файла."""
         if not self.config_path.exists():
+            # Use logger if initialized, otherwise print? 
+            # Actually logger is not init yet when loading config usually.
             print(f"Конфиг {self.config_path} не найден, создаю дефолтный.")
             self.save()
             return self.config
@@ -53,6 +56,7 @@ class ConfigManager:
             global_data = data.get("global", {})
             self.config.port = global_data.get("port", DEFAULT_PORT)
             self.config.check_interval = global_data.get("check_interval", DEFAULT_CHECK_INTERVAL)
+            self.config.log_level = global_data.get("log_level", "INFO")
 
             self.config.ibs = []
             for ib_data in data.get("ibs", []):
@@ -68,7 +72,8 @@ class ConfigManager:
         data = {
             "global": {
                 "port": self.config.port,
-                "check_interval": self.config.check_interval
+                "check_interval": self.config.check_interval,
+                "log_level": self.config.log_level
             },
             "ibs": [asdict(ib) for ib in self.config.ibs]
         }

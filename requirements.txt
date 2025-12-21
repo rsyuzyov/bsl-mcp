@@ -8,3 +8,5 @@ optimum[onnxruntime]
 PyYAML
 python-multipart
 jinja2
+lancedb
+chromadb

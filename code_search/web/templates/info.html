@@ -12,7 +12,17 @@
         <h3>О системе</h3>
         <p>BSL Search MCP — это система семантического поиска кода для 1С:Предприятие. Позволяет находить фрагменты кода
             по их смыслу, даже если ключевые слова не совпадают.</p>
-        <div style="margin-top: 1rem;">
+
+        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color, #eee);">
+            <strong>Порядок работы:</strong>
+            <ol style="margin-top: 0.5rem; padding-left: 1.2rem; color: var(--text-color); margin-bottom: 1rem;">
+                <li>Добавляется информационная база.</li>
+                <li>Модель генерирует эмбеддинги и передает их движку.</li>
+                <li>Движок индексирует данные и обеспечивает выполнение поиска.</li>
+            </ol>
+        </div>
+
+        <div>
             <strong>Версия:</strong> 1.0.0<br>
             <strong>Платформа:</strong> Python + FastAPI<br>
             <strong>Поддерживаемые файлы:</strong> .bsl, .xml
@@ -21,20 +31,18 @@
 
     <!-- Engine Info -->
     <div class="card">
-        <h3>Поисковый движок</h3>
-        <div class="d-flex align-center gap-2 mb-3">
-            <span style="font-size: 2rem;">🚀</span>
-            <div>
-                <div style="font-weight: 600;">Qdrant</div>
-                <div style="font-size: 0.9rem; color: var(--text-muted);">Векторная база данных</div>
-            </div>
-        </div>
-        <p>Используется локальный экземпляр Qdrant для хранения векторных представлений кода. Обеспечивает быстрый поиск
-            с помощью косинусного сходства (Cosine Similarity).</p>
-        <ul style="padding-left: 1.25rem; color: var(--text-color);">
-            <li>Локальное хранение индексов</li>
-            <li>Поддержка фильтрации по файлам</li>
-            <li>Инкрементальная индексация</li>
+        <h3>Движки</h3>
+        <ul style="margin-top: 1rem; padding-left: 1.2rem; color: var(--text-color);">
+            <li style="margin-bottom: 0.8rem;">
+                <strong>Qdrant</strong>: Текущий выбор. Отличный функционал, есть локальный режим.
+            </li>
+            <li style="margin-bottom: 0.8rem;">
+                <strong>LanceDB</strong>: Очень перспективный embedded векторный DB. Работает поверх Arrow,
+                сверхбыстрый, не требует демона. Идеален для локальных MCP.
+            </li>
+            <li>
+                <strong>ChromaDB</strong>: Популярный выбор для простых скриптов, но бывает капризен с зависимостями.
+            </li>
         </ul>
     </div>
 
@@ -44,31 +52,67 @@
         <p>Для превращения кода в векторы используются нейросетевые модели (Embedding Models). По умолчанию используется
             облегченная модель, оптимизированная для русского языка и кода.</p>
 
-        <table style="margin-top: 1rem;">
+        <table style="margin-top: 1rem; width: 100%; border-collapse: collapse;">
             <thead>
-                <tr>
-                    <th>Модель</th>
-                    <th>Тип</th>
-                    <th>Описание</th>
+                <tr style="text-align: left;">
+                    <th style="padding: 8px;">Модель</th>
+                    <th style="padding: 8px;">Тип</th>
+                    <th style="padding: 8px;">Описание</th>
                 </tr>
             </thead>
             <tbody>
-                <tr>
-                    <td style="font-weight: 600;">cointegrated/rubert-tiny2</td>
-                    <td>Transformer (ONNX)</td>
-                    <td>Основная модель. Компактная версия RuBERT. Высокая скорость работы на CPU благодаря ONNX
-                        Runtime. Отлично понимает русский язык и контекст 1С кода.</td>
+                <tr style="border-bottom: 1px solid var(--border-color, #eee);">
+                    <td style="font-weight: 600; padding: 8px;">cointegrated/rubert-tiny2</td>
+                    <td style="padding: 8px;">Transformer (ONNX)</td>
+                    <td style="padding: 8px;">Абсолютный лидер для CPU. Очень быстрый, качество достаточное для поиска
+                        кода.</td>
                 </tr>
-                <!-- Placeholder for future models -->
-                <!--
-                <tr>
-                    <td style="font-weight: 600;">intfloat/multilingual-e5-base</td>
-                    <td>Transformer</td>
-                    <td>Более мощная многоязычная модель (требует больше ресурсов).</td>
+                <tr style="border-bottom: 1px solid var(--border-color, #eee);">
+                    <td style="font-weight: 600; padding: 8px;">intfloat/multilingual-e5-small</td>
+                    <td style="padding: 8px;">Transformer (ONNX)</td>
+                    <td style="padding: 8px;">Современный стандарт качественных эмбеддингов. Чуть тяжелее, но точнее.
+                    </td>
                 </tr>
-                -->
+                <tr>
+                    <td style="font-weight: 600; padding: 8px;">ai-forever/sbert_large_nlu_ru</td>
+                    <td style="padding: 8px;">Transformer (ONNX)</td>
+                    <td style="padding: 8px;">Отличная русская модель, но тяжелая для CPU (не рекомендуем для этого
+                        сетапа, но можно добавить для опции).</td>
+                </tr>
             </tbody>
         </table>
+    </div>
+
+    <!-- Connection Instructions -->
+    <div class="card" style="grid-column: span 2;">
+        <h3>Инструкции по подключению</h3>
+
+        <h4 style="margin-top: 1rem; margin-bottom: 0.5rem;">Kiro / Supermaven</h4>
+        <p>Добавьте в файл <code>~/.kiro/settings/mcp.json</code>:</p>
+        <pre
+            style="background: var(--bg-secondary, #f5f5f5); padding: 1rem; border-radius: 6px; overflow-x: auto; font-family: monospace; font-size: 0.9em;">{
+  "mcpServers": {
+    "1c-rag": {
+      "url": "http://localhost:8000/sse"
+    }
+  }
+}</pre>
+
+        <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">Claude Desktop</h4>
+        <p>Добавьте в конфигурационный файл:</p>
+        <pre
+            style="background: var(--bg-secondary, #f5f5f5); padding: 1rem; border-radius: 6px; overflow-x: auto; font-family: monospace; font-size: 0.9em;">{
+  "mcpServers": {
+    "1c-rag": {
+      "command": "python",
+      "args": ["C:\\путь\\к\\repo\\bsl-mcp\\code-search.py"]
+    }
+  }
+}</pre>
+        <p style="font-size: 0.9rem; color: var(--text-muted); margin-top: 0.5rem;">
+            <em>Примечание: Рекомендуется использовать SSE подключение (<code>http://localhost:8000/sse</code>), если
+                клиент поддерживает его.</em>
+        </p>
     </div>
 
 </div>

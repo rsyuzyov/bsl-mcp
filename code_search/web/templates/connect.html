@@ -1,0 +1,39 @@
+{% extends "layout.html" %}
+
+{% block page_title %}Подключение{% endblock %}
+{% block page_description %}Инструкции по подключению MCP-сервера к различным клиентам.{% endblock %}
+
+{% block content %}
+
+<div class="card">
+    <h3>Kiro / Supermaven</h3>
+    <p>Добавьте в файл <code>~/.kiro/settings/mcp.json</code>:</p>
+    <pre
+        style="background: var(--bg-secondary, #f5f5f5); padding: 1rem; border-radius: 6px; overflow-x: auto; font-family: monospace; font-size: 0.9em;">{
+  "mcpServers": {
+    "1c-rag": {
+      "url": "http://localhost:8000/sse"
+    }
+  }
+}</pre>
+</div>
+
+<div class="card" style="margin-top: 1.5rem;">
+    <h3>Claude Desktop</h3>
+    <p>Добавьте в конфигурационный файл:</p>
+    <pre
+        style="background: var(--bg-secondary, #f5f5f5); padding: 1rem; border-radius: 6px; overflow-x: auto; font-family: monospace; font-size: 0.9em;">{
+  "mcpServers": {
+    "1c-rag": {
+      "command": "python",
+      "args": ["C:\\путь\\к\\repo\\bsl-mcp\\code-search.py"]
+    }
+  }
+}</pre>
+    <p style="font-size: 0.9rem; color: var(--text-muted); margin-top: 0.5rem;">
+        <em>Примечание: Рекомендуется использовать SSE подключение (<code>http://localhost:8000/sse</code>), если
+            клиент поддерживает его.</em>
+    </p>
+</div>
+
+{% endblock %}

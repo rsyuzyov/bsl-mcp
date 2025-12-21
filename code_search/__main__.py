@@ -24,31 +24,38 @@ def is_port_in_use(port: int) -> bool:
 
 
 def main():
+    # 1. Настройка логирования - ПЕРВЫМ ДЕЛОМ (ротация старого лога)
+    logger = setup_logging()  # Сначала с уровнем по умолчанию
+    logger.info("Запуск Multi-IB Code Search...")
+
     args = parse_args()
     
-    # 1. Загрузка конфигурации
+    # 2. Загрузка конфигурации
     config_mgr = ConfigManager()
     config = config_mgr.load()
     
-    # Переопределение порта из аргументов (до проверки!)
+    # Переопределение порта из аргументов
     if args.port:
         config.port = args.port
 
-    # 2. Проверка занятости порта ДО тяжёлой инициализации
+    # Применяем уровень логирования из конфига
+    import logging
+    level = getattr(logging, config.log_level.upper(), logging.INFO)
+    logging.getLogger().setLevel(level)
+
+    # 3. Проверка занятости порта ДО тяжёлой инициализации
     if is_port_in_use(config.port):
-        print(f"Ошибка: порт {config.port} уже занят. Возможно, приложение уже запущено.", file=sys.stderr)
+        logger.error(f"Порт {config.port} уже занят. Возможно, приложение уже запущено.")
         sys.exit(1)
 
-    # 3. Настройка логирования
-    logger = setup_logging(config.log_level)
-    logger.info("Запуск Multi-IB Code Search...")
-
-    # 4. Инициализация менеджера ИБ
+    # 4. Инициализация менеджера ИБ (фоновая загрузка моделей)
     ib_manager = IBManager(config_mgr)
-    ib_manager.initialize()
     
-    # 5. Создание приложения
+    # 5. Создание приложения (сразу доступен веб-интерфейс)
     app = create_app(ib_manager)
+    
+    # 6. Запуск инициализации ИБ в фоновом потоке
+    ib_manager.initialize_async()
     
     logger.info(f"Сервер доступен на http://localhost:{config.port}")
     if not config.ibs:

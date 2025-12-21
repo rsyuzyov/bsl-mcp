@@ -83,38 +83,6 @@
         </table>
     </div>
 
-    <!-- Connection Instructions -->
-    <div class="card" style="grid-column: span 2;">
-        <h3>Инструкции по подключению</h3>
-
-        <h4 style="margin-top: 1rem; margin-bottom: 0.5rem;">Kiro / Supermaven</h4>
-        <p>Добавьте в файл <code>~/.kiro/settings/mcp.json</code>:</p>
-        <pre
-            style="background: var(--bg-secondary, #f5f5f5); padding: 1rem; border-radius: 6px; overflow-x: auto; font-family: monospace; font-size: 0.9em;">{
-  "mcpServers": {
-    "1c-rag": {
-      "url": "http://localhost:8000/sse"
-    }
-  }
-}</pre>
-
-        <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">Claude Desktop</h4>
-        <p>Добавьте в конфигурационный файл:</p>
-        <pre
-            style="background: var(--bg-secondary, #f5f5f5); padding: 1rem; border-radius: 6px; overflow-x: auto; font-family: monospace; font-size: 0.9em;">{
-  "mcpServers": {
-    "1c-rag": {
-      "command": "python",
-      "args": ["C:\\путь\\к\\repo\\bsl-mcp\\code-search.py"]
-    }
-  }
-}</pre>
-        <p style="font-size: 0.9rem; color: var(--text-muted); margin-top: 0.5rem;">
-            <em>Примечание: Рекомендуется использовать SSE подключение (<code>http://localhost:8000/sse</code>), если
-                клиент поддерживает его.</em>
-        </p>
-    </div>
-
 </div>
 
 {% endblock %}

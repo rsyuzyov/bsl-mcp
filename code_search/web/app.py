@@ -39,6 +39,14 @@ def create_app(ib_manager: IBManager) -> FastAPI:
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
     templates = Jinja2Templates(directory=str(template_dir))
 
+    @app.get("/favicon.ico")
+    async def favicon():
+        from fastapi.responses import FileResponse
+        favicon_path = static_dir / "favicon.png"
+        if favicon_path.exists():
+            return FileResponse(favicon_path, media_type="image/png")
+        raise HTTPException(404, "Favicon not found")
+
     @app.get("/", response_class=HTMLResponse)
     async def index_page(request: Request):
         # List IBs
@@ -73,6 +81,13 @@ def create_app(ib_manager: IBManager) -> FastAPI:
             "active_page": "info"
         })
 
+    @app.get("/connect", response_class=HTMLResponse)
+    async def connect_page(request: Request):
+        return templates.TemplateResponse("connect.html", {
+            "request": request,
+            "active_page": "connect"
+        })
+
     @app.get("/ib/{name}", response_class=HTMLResponse)
     async def ib_page(request: Request, name: str):
         ctx = ib_manager.get_context(name)
@@ -97,6 +112,7 @@ def create_app(ib_manager: IBManager) -> FastAPI:
         source_dir: str = Form(...),
         index_dir: str = Form(...),
         embedding_model: str = Form("cointegrated/rubert-tiny2"),
+        embedding_device: str = Form("cpu"),
         engine: str = Form("qdrant")
     ):
         try:
@@ -106,6 +122,7 @@ def create_app(ib_manager: IBManager) -> FastAPI:
                 source_dir=source_dir,
                 index_dir=index_dir,
                 embedding_model=embedding_model,
+                embedding_device=embedding_device,
                 vector_db=engine
             )
             ib_manager.add_ib(conf)
@@ -113,9 +130,38 @@ def create_app(ib_manager: IBManager) -> FastAPI:
         except Exception as e:
             return HTMLResponse(f"Ошибка: {e}", status_code=400)
 
+    @app.post("/api/ib/update")
+    async def update_ib(
+        name: str = Form(...), 
+        title: str = Form(""), 
+        source_dir: str = Form(...),
+        index_dir: str = Form(...),
+        embedding_model: str = Form("cointegrated/rubert-tiny2"),
+        embedding_device: str = Form("cpu"),
+        engine: str = Form("qdrant")
+    ):
+        try:
+            # Check if exists
+            if not ib_manager.get_context(name):
+                 return HTMLResponse(f"Ошибка: ИБ {name} не найдена", status_code=404)
+
+            conf = IBConfig(
+                name=name,
+                title=title or name,
+                source_dir=source_dir,
+                index_dir=index_dir,
+                embedding_model=embedding_model,
+                embedding_device=embedding_device,
+                vector_db=engine
+            )
+            ib_manager.add_ib(conf, overwrite=True)
+            return RedirectResponse("/", status_code=303)
+        except Exception as e:
+            return HTMLResponse(f"Ошибка: {e}", status_code=400)
+
     @app.post("/api/ib/{name}/delete")
-    async def delete_ib(name: str):
-        ib_manager.remove_ib(name)
+    async def delete_ib(name: str, with_data: bool = Form(False)):
+        ib_manager.remove_ib(name, with_data=with_data)
         return RedirectResponse("/", status_code=303)
 
     # API endpoints for specific IB

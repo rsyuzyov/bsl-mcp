@@ -15,9 +15,7 @@
     <!-- Assuming we have a modal or form to add. For now, simple form toggle or link? 
          The app.py has /api/ib/add endpoint. Let's make a simple hidden form or generic "Add" button that toggles visibility.
     -->
-    <button class="btn btn-primary"
-        onclick="document.getElementById('add-form').style.display = document.getElementById('add-form').style.display === 'none' ? 'block' : 'none'"
-        title="Добавить">
+    <button class="btn btn-primary" onclick="openAddForm()" title="Добавить">
         +
     </button>
 </div>
@@ -25,8 +23,8 @@
 <!-- Add Form (Hidden by default) -->
 <!-- Add Form (Hidden by default) -->
 <div id="add-form" class="card" style="display: none;">
-    <h3 style="margin-top: 0;">Добавить конфигурацию</h3>
-    <form action="/api/ib/add" method="post">
+    <h3 style="margin-top: 0;" id="form-title">Добавить конфигурацию</h3>
+    <form action="/api/ib/add" method="post" id="ib-form">
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
             <div>
                 <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Имя (Slug)</label>
@@ -79,6 +77,16 @@
                 </select>
             </div>
 
+            <!-- Device -->
+            <div>
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Устройство (Device)</label>
+                <select name="embedding_device" class="form-control">
+                    <option value="cpu" selected>CPU</option>
+                    <option value="cuda">CUDA (Nvidia GPU)</option>
+                    <option value="dml">DirectML (AMD/Intel GPU)</option>
+                </select>
+            </div>
+
             <!-- Engine -->
             <div>
                 <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Поисковый движок</label>
@@ -89,11 +97,26 @@
                 </select>
             </div>
         </div>
-        <div class="text-end">
-            <button type="button" class="btn" onclick="document.getElementById('add-form').style.display='none'"
-                style="margin-right: 0.5rem;">Отмена</button>
-            <button type="submit" class="btn btn-primary">Создать</button>
+        <div class="d-flex justify-between align-center">
+            <!-- Left Actions (Delete/Reindex) only in Edit mode -->
+            <div id="edit-actions" style="display: none; gap: 0.5rem;">
+                <button type="button" class="btn btn-danger" onclick="deleteIB()">Удалить</button>
+                <button type="button" class="btn" style="background: #ffc107; color: #000;"
+                    onclick="reindexCurrent()">Reindex</button>
+            </div>
+
+            <div class="text-end" style="margin-left: auto;">
+                <button type="button" class="btn" onclick="document.getElementById('add-form').style.display='none'"
+                    style="margin-right: 0.5rem;">Отмена</button>
+                <button type="submit" class="btn btn-primary" id="form-submit-btn">Создать</button>
+            </div>
         </div>
+
+        <!-- Hidden forms for actions -->
+    </form>
+
+    <form id="delete-form" method="post" style="display:none;">
+        <input type="hidden" name="with_data" value="true">
     </form>
 </div>
 
@@ -123,65 +146,7 @@
     </div>
 </div>
 
-<!-- Instruction Modal -->
-<div id="instruction-modal"
-    style="display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
-    <div class="card"
-        style="width: 700px; max-height: 85vh; display: flex; flex-direction: column; overflow: hidden; padding: 0;">
-        <div class="d-flex justify-between align-center"
-            style="padding: 1rem; border-bottom: 1px solid var(--border-color);">
-            <h3 style="margin: 0;">Подключение MCP</h3>
-            <div class="d-flex align-center" style="gap: 1rem;">
-                <!-- Remote toggle removed -->
-                <button class="btn btn-icon" onclick="closeInstruction()">✕</button>
-            </div>
-        </div>
 
-        <div style="padding: 1rem; flex-grow: 1; overflow-y: auto;">
-            <p>Выберите клиент для просмотра инструкции подключения конфигурации <b id="inst-ib-name"></b>:</p>
-
-            <div class="tabs"
-                style="display: flex; gap: 0.5rem; border-bottom: 1px solid var(--border-color); margin-bottom: 1rem;">
-                <button class="tab-btn active" onclick="switchTab('claude')">Claude</button>
-                <button class="tab-btn" onclick="switchTab('cursor')">Cursor</button>
-                <button class="tab-btn" onclick="switchTab('kiro')">Kiro</button>
-                <button class="tab-btn" onclick="switchTab('antigravity')">Antigravity</button>
-            </div>
-
-            <div id="tab-claude" class="tab-content">
-                <p>Добавьте в <code>claude_desktop_config.json</code>:</p>
-                <pre
-                    style="background: #f4f4f4; padding: 1rem; border-radius: 4px; overflow-x: auto;"><code id="code-claude"></code></pre>
-            </div>
-
-            <div id="tab-cursor" class="tab-content" style="display: none;">
-                <p>1. Open <b>Cursor Settings</b> > <b>Features</b> > <b>MCP</b>.</p>
-                <p>2. Click <b>Add New MCP Server</b>.</p>
-                <p>3. Select Type: <code>stdio</code> (или <code>SSE</code> если доступно).</p>
-                <p>4. Name: <code id="name-cursor"></code></p>
-                <p>5. Command:</p>
-                <pre
-                    style="background: #f4f4f4; padding: 1rem; border-radius: 4px; overflow-x: auto;"><code id="code-cursor"></code></pre>
-            </div>
-
-            <div id="tab-kiro" class="tab-content" style="display: none;">
-                <p>Настройки для Kiro:</p>
-                <pre
-                    style="background: #f4f4f4; padding: 1rem; border-radius: 4px; overflow-x: auto;"><code id="code-kiro"></code></pre>
-            </div>
-
-            <div id="tab-antigravity" class="tab-content" style="display: none;">
-                <p>Для Antigravity Agent добавьте в конфигурацию:</p>
-                <pre
-                    style="background: #f4f4f4; padding: 1rem; border-radius: 4px; overflow-x: auto;"><code id="code-antigravity"></code></pre>
-            </div>
-        </div>
-
-        <div style="padding: 1rem; border-top: 1px solid var(--border-color); text-align: right;">
-            <button class="btn" onclick="closeInstruction()">Закрыть</button>
-        </div>
-    </div>
-</div>
 
 <style>
     .tab-btn {
@@ -243,37 +208,22 @@
                         </div>
                     </td>
                     <td>
-                        <!-- Connection Instructions -->
-                        <button class="btn btn-icon" title="Инструкция для подключения"
-                            onclick="showInstruction('{{ ctx.config.name }}')"
-                            style="border: 1px solid var(--border-color);">
-                            <span style="font-weight: bold;">?</span>
-                        </button>
-                        <!-- Helper form to delete -->
-                        <form action="/api/ib/{{ ctx.config.name }}/delete" method="post"
-                            onsubmit="return confirm('Удалить {{ ctx.config.name }}?');">
-                            <button type="submit" class="btn btn-danger btn-icon" title="Удалить">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <polyline points="3 6 5 6 21 6"></polyline>
-                                    <path
-                                        d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
-                                    </path>
-                                </svg>
-                            </button>
-                        </form>
-                        <!-- Reindex buttons -->
-                        <button class="btn btn-icon" title="Полный реиндекс"
-                            onclick="reindex('{{ ctx.config.name }}', 'full')"
-                            style="border: 1px solid var(--border-color);">
+                        <!-- Edit Button (Gear) -->
+                        <button class="btn btn-icon" title="Настройки" onclick="editIB(this)"
+                            data-name="{{ ctx.config.name }}" data-title="{{ ctx.config.title }}"
+                            data-source="{{ ctx.config.source_dir }}" data-index="{{ ctx.config.index_dir }}"
+                            data-model="{{ ctx.config.embedding_model }}"
+                            data-device="{{ ctx.config.embedding_device }}" data-engine="{{ ctx.config.vector_db }}"
+                            style="border: 1px solid var(--border-color); margin-right: 0.25rem;">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <polyline points="23 4 23 10 17 10"></polyline>
-                                <polyline points="1 20 1 14 7 14"></polyline>
-                                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15">
+                                <circle cx="12" cy="12" r="3"></circle>
+                                <path
+                                    d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
                                 </path>
                             </svg>
                         </button>
+
     </div>
     </td>
     </tr>
@@ -305,6 +255,74 @@
         } catch (e) {
             alert('Ошибка: ' + e);
         }
+    }
+
+    function editIB(btn) {
+        const data = btn.dataset;
+        const form = document.getElementById('add-form');
+        const ibForm = document.getElementById('ib-form');
+
+        document.getElementById('form-title').innerText = 'Настройки ' + data.name;
+        document.getElementById('form-submit-btn').innerText = 'Сохранить';
+
+        ibForm.action = '/api/ib/update';
+
+        // Fill fields
+        ibForm.name.value = data.name;
+        ibForm.name.readOnly = true; // Cannot change ID
+        ibForm.title.value = data.title;
+        ibForm.source_dir.value = data.source;
+        ibForm.index_dir.value = data.index;
+        ibForm.embedding_model.value = data.model;
+        ibForm.embedding_device.value = data.device || 'cpu';
+        ibForm.engine.value = data.engine;
+
+        document.getElementById('edit-actions').style.display = 'flex';
+
+        form.style.display = 'block';
+        window.scrollTo(0, 0);
+    }
+
+    function deleteIB() {
+        const name = document.getElementById('ib-form').name.value;
+        if (!confirm(`Удалить конфигурацию ${name}?\nВНИМАНИЕ: Это также удалит папку с индексом!`)) return;
+
+        const form = document.getElementById('delete-form');
+        form.action = `/api/ib/${name}/delete`;
+        form.submit();
+    }
+
+    async function reindexCurrent() {
+        const name = document.getElementById('ib-form').name.value;
+        if (!confirm(`Пересоздать индекс для ${name} с нуля?`)) return;
+
+        try {
+            const res = await fetch(`/api/ib/${name}/reindex/full`, { method: 'POST' });
+            const data = await res.json();
+            if (data.error) alert(data.error);
+            else {
+                alert('Реиндексация запущена');
+                location.reload();
+            }
+        } catch (e) {
+            alert(e);
+        }
+    }
+
+    // Reset form when clicking add
+    function openAddForm() {
+        const form = document.getElementById('add-form');
+        const ibForm = document.getElementById('ib-form');
+
+        document.getElementById('form-title').innerText = 'Добавить конфигурацию';
+        document.getElementById('form-submit-btn').innerText = 'Создать';
+        document.getElementById('edit-actions').style.display = 'none';
+
+        ibForm.action = '/api/ib/add';
+        ibForm.reset();
+        ibForm.name.readOnly = false;
+
+        form.style.display = 'block';
     }
 
     // Directory Picker Logic
@@ -433,79 +451,7 @@
         pythonPath: String.raw`{{ python_path }}`.replace(/\\/g, '/')
     };
 
-    // Instruction Modal Logic
-    let currentIBName = '';
 
-    function showInstruction(ibName) {
-        currentIBName = ibName;
-        document.getElementById('inst-ib-name').innerText = ibName;
-        document.getElementById('instruction-modal').style.display = 'flex';
-        renderInstructions();
-    }
-
-    function toggleRemote() {
-        // Legacy: Remote toggle removed, always network/SSE
-        renderInstructions();
-    }
-
-    function renderInstructions() {
-        const ibName = currentIBName;
-        // Construct SSE URL based on current browser location
-        // e.g. http://localhost:8000/sse or http://192.168.1.5:8000/sse
-        const sseUrl = `${window.location.origin}/sse`;
-
-        // Claude
-        const claudeConfig = {
-            "mcpServers": {
-                [`bsl-${ibName}`]: {
-                    "url": sseUrl
-                }
-            }
-        };
-        document.getElementById('code-claude').innerText = JSON.stringify(claudeConfig, null, 2);
-
-        // Cursor
-        document.getElementById('name-cursor').innerText = `bsl-${ibName}`;
-        document.getElementById('code-cursor').innerHTML = `1. Add New MCP Server<br>2. Type: <b>SSE</b><br>3. URL: <code>${sseUrl}</code>`;
-
-        // Kiro
-        const kiroConfig = {
-            "mcpServers": {
-                [`bsl-${ibName}`]: {
-                    "url": sseUrl
-                }
-            }
-        };
-        document.getElementById('code-kiro').innerText = JSON.stringify(kiroConfig, null, 2);
-
-        // Antigravity / Generic
-        const antiConfig = {
-            "mcp_servers": [
-                {
-                    "name": `bsl-${ibName}`,
-                    "url": sseUrl
-                }
-            ]
-        };
-        document.getElementById('code-antigravity').innerText = JSON.stringify(antiConfig, null, 2);
-    }
-
-    function closeInstruction() {
-        document.getElementById('instruction-modal').style.display = 'none';
-    }
-
-    function switchTab(tabName) {
-        document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
-        document.getElementById('tab-' + tabName).style.display = 'block';
-
-        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-        // Find button by onclick, simplified:
-        const buttons = document.querySelectorAll('.tab-btn');
-        if (tabName === 'claude') buttons[0].classList.add('active');
-        if (tabName === 'cursor') buttons[1].classList.add('active');
-        if (tabName === 'kiro') buttons[2].classList.add('active');
-        if (tabName === 'antigravity') buttons[3].classList.add('active');
-    }
 </script>
 
 {% endblock %}

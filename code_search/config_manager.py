@@ -81,12 +81,18 @@ class ConfigManager:
         with open(self.config_path, "w", encoding="utf-8") as f:
             yaml.dump(data, f, allow_unicode=True, sort_keys=False)
 
-    def add_ib(self, ib: IBConfig):
+    def add_ib(self, ib: IBConfig, overwrite: bool = False):
         """Добавить новую ИБ."""
         # Проверка дубликатов
-        for existing in self.config.ibs:
+        for i, existing in enumerate(self.config.ibs):
             if existing.name == ib.name:
-                raise ValueError(f"ИБ с именем {ib.name} уже существует")
+                if not overwrite:
+                    raise ValueError(f"ИБ с именем {ib.name} уже существует")
+                # Заменяем существующую
+                self.config.ibs[i] = ib
+                self.save()
+                return
+
         self.config.ibs.append(ib)
         self.save()
 

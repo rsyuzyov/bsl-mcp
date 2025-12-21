@@ -64,11 +64,24 @@ class IBManager:
     def __init__(self, config_manager: ConfigManager):
         self.config_manager = config_manager
         self.contexts: dict[str, IBContext] = {}
+        self.is_initializing: bool = False
+        self._init_thread: threading.Thread | None = None
 
     def initialize(self):
-        """Инициализация всех ИБ из конфига."""
-        for ib_conf in self.config_manager.config.ibs:
-            self._init_ib(ib_conf)
+        """Синхронная инициализация всех ИБ из конфига."""
+        self.is_initializing = True
+        try:
+            for ib_conf in self.config_manager.config.ibs:
+                self._init_ib(ib_conf)
+        finally:
+            self.is_initializing = False
+
+    def initialize_async(self):
+        """Асинхронная инициализация в фоновом потоке."""
+        if self._init_thread and self._init_thread.is_alive():
+            return
+        self._init_thread = threading.Thread(target=self.initialize, daemon=True)
+        self._init_thread.start()
 
     def _init_ib(self, ib_conf: IBConfig):
         """Инициализация одной ИБ."""
@@ -94,18 +107,36 @@ class IBManager:
         except Exception as e:
             logger.error(f"Ошибка инициализации ИБ {ib_conf.name}: {e}", exc_info=True)
 
-    def add_ib(self, ib_conf: IBConfig):
-        """Добавление новой ИБ."""
-        self.config_manager.add_ib(ib_conf)
+    def add_ib(self, ib_conf: IBConfig, overwrite: bool = False):
+        """Добавление или обновление ИБ."""
+        if overwrite and ib_conf.name in self.contexts:
+            # Stop existing
+            logger.info(f"Остановка ИБ {ib_conf.name} перед обновлением...")
+            self.remove_ib(ib_conf.name, remove_config=False)
+            
+        self.config_manager.add_ib(ib_conf, overwrite=overwrite)
         self._init_ib(ib_conf)
 
-    def remove_ib(self, name: str):
+    def remove_ib(self, name: str, remove_config: bool = True, with_data: bool = False):
         """Удаление ИБ."""
         if name in self.contexts:
             ctx = self.contexts[name]
             ctx.stop_maintenance()
             del self.contexts[name]
-        self.config_manager.remove_ib(name)
+            
+            if with_data:
+                try:
+                    import shutil
+                    from pathlib import Path
+                    p = Path(ctx.config.index_dir)
+                    if p.exists() and p.is_dir():
+                        shutil.rmtree(p)
+                        logger.info(f"Удалена папка индекса: {p}")
+                except Exception as e:
+                    logger.error(f"Ошибка удаления данных {name}: {e}")
+        
+        if remove_config:
+            self.config_manager.remove_ib(name)
 
     def get_context(self, name: str) -> IBContext | None:
         return self.contexts.get(name)

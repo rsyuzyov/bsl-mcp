@@ -122,6 +122,7 @@ class IBManager:
         if name in self.contexts:
             ctx = self.contexts[name]
             ctx.stop_maintenance()
+            ctx.engine.close()
             del self.contexts[name]
             
             if with_data:

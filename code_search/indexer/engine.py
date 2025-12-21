@@ -49,6 +49,11 @@ class IndexEngine:
         """Создать коллекцию если не существует."""
         self.db.create_collection(self.collection_name, self.vector_size)
 
+    def close(self):
+        """Закрыть соединение с БД."""
+        if self.db:
+            self.db.close()
+
     def get_all_files(self) -> list[Path]:
         """Получить все XML и BSL файлы."""
         if not self.source_dir.exists():

@@ -62,8 +62,19 @@ def create_app(ib_manager: IBManager) -> FastAPI:
             "ibs": ibs,
             "active_page": "config",
             "repo_path": repo_path,
-            "python_path": python_path
+            "python_path": python_path,
+            "is_initializing": ib_manager.is_initializing,
+            "config_ibs_count": len(ib_manager.config_manager.config.ibs)
         })
+    
+    @app.get("/api/init-status")
+    async def get_init_status():
+        """Статус инициализации ИБ."""
+        return {
+            "is_initializing": ib_manager.is_initializing,
+            "loaded_count": len(ib_manager.contexts),
+            "config_count": len(ib_manager.config_manager.config.ibs)
+        }
     
     @app.get("/search", response_class=HTMLResponse)
     async def search_page(request: Request):

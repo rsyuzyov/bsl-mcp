@@ -20,438 +20,510 @@
     </button>
 </div>
 
-<!-- Add Form (Hidden by default) -->
-<!-- Add Form (Hidden by default) -->
-<div id="add-form" class="card" style="display: none;">
-    <h3 style="margin-top: 0;" id="form-title">Добавить конфигурацию</h3>
-    <form action="/api/ib/add" method="post" id="ib-form">
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
-            <div>
-                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Имя (Slug)</label>
-                <input type="text" name="name" class="form-control" required placeholder="zup3">
-            </div>
-            <div>
-                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Заголовок</label>
-                <input type="text" name="title" class="form-control" placeholder="Зарплата и Управление Персоналом">
-            </div>
-            <div>
-                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Папка исходников</label>
-                <div class="input-action-wrapper">
-                    <input type="text" name="source_dir" id="source_dir" class="form-control" required
-                        placeholder="C:\src\zup">
-                    <button type="button" class="btn-action" onclick="openDirPicker('source_dir')"
-                        title="Выбрать папку">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="12" cy="12" r="1"></circle>
-                            <circle cx="19" cy="12" r="1"></circle>
-                            <circle cx="5" cy="12" r="1"></circle>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-            <div>
-                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Папка индекса</label>
-                <div class="input-action-wrapper">
-                    <input type="text" name="index_dir" id="index_dir" class="form-control" required
-                        placeholder="C:\indexes\zup">
-                    <button type="button" class="btn-action" onclick="openDirPicker('index_dir')" title="Выбрать папку">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="12" cy="12" r="1"></circle>
-                            <circle cx="19" cy="12" r="1"></circle>
-                            <circle cx="5" cy="12" r="1"></circle>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Models -->
-            <div>
-                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Модель эмбеддинга</label>
-                <select name="embedding_model" class="form-control">
-                    <option value="cointegrated/rubert-tiny2" selected>cointegrated/rubert-tiny2 (Быстрая, CPU)</option>
-                    <option value="intfloat/multilingual-e5-small">intfloat/multilingual-e5-small (Качественная)
-                    </option>
-                    <option value="ai-forever/sbert_large_nlu_ru">ai-forever/sbert_large_nlu_ru (Тяжелая)</option>
-                </select>
-            </div>
-
-            <!-- Device -->
-            <div>
-                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Устройство (Device)</label>
-                <select name="embedding_device" class="form-control">
-                    <option value="cpu" selected>CPU</option>
-                    <option value="cuda">CUDA (Nvidia GPU)</option>
-                    <option value="dml">DirectML (AMD/Intel GPU)</option>
-                </select>
-            </div>
-
-            <!-- Engine -->
-            <div>
-                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Поисковый движок</label>
-                <select name="engine" class="form-control">
-                    <option value="qdrant" selected>Qdrant (Vector DB)</option>
-                    <option value="lancedb">LanceDB (Embedded)</option>
-                    <option value="chromadb">ChromaDB (Local)</option>
-                </select>
-            </div>
-        </div>
-        <div class="d-flex justify-between align-center">
-            <!-- Left Actions (Delete/Reindex) only in Edit mode -->
-            <div id="edit-actions" style="display: none; gap: 0.5rem;">
-                <button type="button" class="btn btn-danger" onclick="deleteIB()">Удалить</button>
-                <button type="button" class="btn" style="background: #ffc107; color: #000;"
-                    onclick="reindexCurrent()">Reindex</button>
-            </div>
-
-            <div class="text-end" style="margin-left: auto;">
-                <button type="button" class="btn" onclick="document.getElementById('add-form').style.display='none'"
-                    style="margin-right: 0.5rem;">Отмена</button>
-                <button type="submit" class="btn btn-primary" id="form-submit-btn">Создать</button>
-            </div>
-        </div>
-
-        <!-- Hidden forms for actions -->
-    </form>
-
-    <form id="delete-form" method="post" style="display:none;">
-        <input type="hidden" name="with_data" value="true">
-    </form>
-</div>
-
-<!-- Dir Picker Modal -->
-<div id="dir-picker"
-    style="display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
-    <div class="card" style="width: 600px; max-height: 80vh; display: flex; flex-direction: column; overflow: hidden;">
-        <div class="d-flex justify-between align-center mb-3">
-            <h3 style="margin: 0;">Выбор папки</h3>
-            <button class="btn btn-icon" onclick="closeDirPicker()">✕</button>
-        </div>
-        <div class="d-flex gap-2 mb-3">
-            <input type="text" id="picker-path" class="form-control" value="." readonly>
-            <button class="btn btn-icon" onclick="createDir()" title="Создать папку"
-                style="border: 1px solid var(--border-color);">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-                    <line x1="12" y1="11" x2="12" y2="17"></line>
-                    <line x1="9" y1="14" x2="15" y2="14"></line>
-                </svg>
-            </button>
-            <button class="btn btn-primary" onclick="selectCurrentDir()">Выбрать</button>
-        </div>
-        <div id="picker-list"
-            style="flex-grow: 1; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 4px;"></div>
+<!-- Initializing Banner -->
+{% if is_initializing or (config_ibs_count > 0 and ibs|length < config_ibs_count) %} <div id="init-banner" class="card"
+    style="margin-bottom: 1rem; padding: 1rem; display: flex; align-items: center; gap: 1rem; background: linear-gradient(135deg, rgba(79, 70, 229, 0.1) 0%, rgba(147, 51, 234, 0.1) 100%); border: 1px solid rgba(79, 70, 229, 0.3);">
+    <div class="spinner"
+        style="width: 24px; height: 24px; border: 3px solid rgba(79, 70, 229, 0.3); border-top-color: #4f46e5; border-radius: 50%; animation: spin 1s linear infinite;">
     </div>
-</div>
+    <div>
+        <div style="font-weight: 600; color: var(--text-color);">Загрузка конфигураций...</div>
+        <div style="font-size: 0.85rem; color: var(--text-muted);" id="init-status-text">
+            Инициализация моделей эмбеддинга. Это может занять несколько секунд.
+        </div>
+    </div>
+    </div>
+    <style>
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+    <script>
+        (function () {
+            let checkCount = 0;
+            const maxChecks = 120; // 2 минуты
 
+            function checkInitStatus() {
+                fetch('/api/init-status')
+                    .then(r => r.json())
+                    .then(data => {
+                        const banner = document.getElementById('init-banner');
+                        const statusText = document.getElementById('init-status-text');
 
+                        if (!data.is_initializing && data.loaded_count >= data.config_count) {
+                            // Инициализация завершена
+                            if (banner) {
+                                banner.style.background = 'linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(16, 185, 129, 0.1) 100%)';
+                                banner.style.borderColor = 'rgba(34, 197, 94, 0.3)';
+                                banner.querySelector('.spinner').style.display = 'none';
+                                banner.querySelector('div > div:first-child').textContent = 'Готово!';
+                                statusText.textContent = 'Загружено ' + data.loaded_count + ' конфигураций. Обновление страницы...';
+                            }
+                            setTimeout(() => location.reload(), 500);
+                        } else {
+                            // Ещё загружается
+                            if (statusText) {
+                                statusText.textContent = 'Загружено ' + data.loaded_count + ' из ' + data.config_count + ' конфигураций...';
+                            }
+                            checkCount++;
+                            if (checkCount < maxChecks) {
+                                setTimeout(checkInitStatus, 1000);
+                            }
+                        }
+                    })
+                    .catch(() => {
+                        checkCount++;
+                        if (checkCount < maxChecks) {
+                            setTimeout(checkInitStatus, 2000);
+                        }
+                    });
+            }
 
-<style>
-    .tab-btn {
-        background: none;
-        border: none;
-        padding: 0.5rem 1rem;
-        cursor: pointer;
-        opacity: 0.7;
-        font-weight: 500;
-        border-bottom: 2px solid transparent;
-    }
+            // Запуск проверки
+            setTimeout(checkInitStatus, 1000);
+        })();
+    </script>
+    {% endif %}
 
-    .tab-btn.active {
-        opacity: 1;
-        border-bottom-color: var(--primary-color);
-        color: var(--primary-color);
-    }
-</style>
-<div class="card" style="padding: 0;">
-    <div class="table-container">
-        <table>
-            <thead>
-                <tr>
-                    <th>Имя / Заголовок</th>
-                    <th>Пути (Source / Index)</th>
-                    <th>Модель</th>
-                    <th>Статус</th>
-                    <th>Действия</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for ctx in ibs %}
-                <tr>
-                    <td>
-                        <div style="font-weight: 600; color: var(--text-color); margin-bottom: 0.25rem;">
-                            <a href="/ib/{{ ctx.config.name }}" style="text-decoration: none; color: inherit;">
-                                {{ ctx.config.title }}
-                            </a>
-                        </div>
-                        <div style="font-size: 0.85rem; color: var(--text-muted);">{{ ctx.config.name }}</div>
-                    </td>
-                    <td>
-                        <div style="font-size: 0.85rem; color: var(--text-muted); font-family: monospace;">
-                            Src: {{ ctx.config.source_dir }}<br>
-                            Idx: {{ ctx.config.index_dir }}
-                        </div>
-                    </td>
-                    <td>
-                        <span style="font-size: 0.9rem;">{{ ctx.config.embedding_model }}</span>
-                    </td>
-                    <td>
-                        <div class="status-badge">
-                            {% if ctx.status.running %}
-                            <span class="status-dot running"></span> Индексация ({{ ctx.status.files_processed }} / {{
-                            ctx.status.total_files }})
-                            {% else %}
-                            <span class="status-dot active"></span> Активен
-                            {% endif %}
-                        </div>
-                    </td>
-                    <td>
-                        <!-- Edit Button (Gear) -->
-                        <button class="btn btn-icon" title="Настройки" onclick="editIB(this)"
-                            data-name="{{ ctx.config.name }}" data-title="{{ ctx.config.title }}"
-                            data-source="{{ ctx.config.source_dir }}" data-index="{{ ctx.config.index_dir }}"
-                            data-model="{{ ctx.config.embedding_model }}"
-                            data-device="{{ ctx.config.embedding_device }}" data-engine="{{ ctx.config.vector_db }}"
-                            style="border: 1px solid var(--border-color); margin-right: 0.25rem;">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    <!-- Add Form (Hidden by default) -->
+    <!-- Add Form (Hidden by default) -->
+    <div id="add-form" class="card" style="display: none;">
+        <h3 style="margin-top: 0;" id="form-title">Добавить конфигурацию</h3>
+        <form action="/api/ib/add" method="post" id="ib-form">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                <div>
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Имя (Slug)</label>
+                    <input type="text" name="name" class="form-control" required placeholder="zup3">
+                </div>
+                <div>
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Заголовок</label>
+                    <input type="text" name="title" class="form-control" placeholder="Зарплата и Управление Персоналом">
+                </div>
+                <div>
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Папка исходников</label>
+                    <div class="input-action-wrapper">
+                        <input type="text" name="source_dir" id="source_dir" class="form-control" required
+                            placeholder="C:\src\zup">
+                        <button type="button" class="btn-action" onclick="openDirPicker('source_dir')"
+                            title="Выбрать папку">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <circle cx="12" cy="12" r="3"></circle>
-                                <path
-                                    d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
-                                </path>
+                                <circle cx="12" cy="12" r="1"></circle>
+                                <circle cx="19" cy="12" r="1"></circle>
+                                <circle cx="5" cy="12" r="1"></circle>
                             </svg>
                         </button>
+                    </div>
+                </div>
+                <div>
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Папка индекса</label>
+                    <div class="input-action-wrapper">
+                        <input type="text" name="index_dir" id="index_dir" class="form-control" required
+                            placeholder="C:\indexes\zup">
+                        <button type="button" class="btn-action" onclick="openDirPicker('index_dir')"
+                            title="Выбрать папку">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="1"></circle>
+                                <circle cx="19" cy="12" r="1"></circle>
+                                <circle cx="5" cy="12" r="1"></circle>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
 
+                <!-- Models -->
+                <div>
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Модель эмбеддинга</label>
+                    <select name="embedding_model" class="form-control">
+                        <option value="cointegrated/rubert-tiny2" selected>cointegrated/rubert-tiny2 (Быстрая, CPU)
+                        </option>
+                        <option value="intfloat/multilingual-e5-small">intfloat/multilingual-e5-small (Качественная)
+                        </option>
+                        <option value="ai-forever/sbert_large_nlu_ru">ai-forever/sbert_large_nlu_ru (Тяжелая)</option>
+                    </select>
+                </div>
+
+                <!-- Device -->
+                <div>
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Устройство (Device)</label>
+                    <select name="embedding_device" class="form-control">
+                        <option value="cpu" selected>CPU</option>
+                        <option value="cuda">CUDA (Nvidia GPU)</option>
+                        <option value="dml">DirectML (AMD/Intel GPU)</option>
+                    </select>
+                </div>
+
+                <!-- Engine -->
+                <div>
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Поисковый движок</label>
+                    <select name="engine" class="form-control">
+                        <option value="qdrant" selected>Qdrant (Vector DB)</option>
+                        <option value="lancedb">LanceDB (Embedded)</option>
+                        <option value="chromadb">ChromaDB (Local)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="d-flex justify-between align-center">
+                <!-- Left Actions (Delete/Reindex) only in Edit mode -->
+                <div id="edit-actions" style="display: none; gap: 0.5rem;">
+                    <button type="button" class="btn btn-danger" onclick="deleteIB()">Удалить</button>
+                    <button type="button" class="btn" style="background: #ffc107; color: #000;"
+                        onclick="reindexCurrent()">Reindex</button>
+                </div>
+
+                <div class="text-end" style="margin-left: auto;">
+                    <button type="button" class="btn" onclick="document.getElementById('add-form').style.display='none'"
+                        style="margin-right: 0.5rem;">Отмена</button>
+                    <button type="submit" class="btn btn-primary" id="form-submit-btn">Создать</button>
+                </div>
+            </div>
+
+            <!-- Hidden forms for actions -->
+        </form>
+
+        <form id="delete-form" method="post" style="display:none;">
+            <input type="hidden" name="with_data" value="true">
+        </form>
     </div>
-    </td>
-    </tr>
-    {% endfor %}
 
-    {% if not ibs %}
-    <tr>
-        <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">
-            Нет добавленных конфигураций
+    <!-- Dir Picker Modal -->
+    <div id="dir-picker"
+        style="display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+        <div class="card"
+            style="width: 600px; max-height: 80vh; display: flex; flex-direction: column; overflow: hidden;">
+            <div class="d-flex justify-between align-center mb-3">
+                <h3 style="margin: 0;">Выбор папки</h3>
+                <button class="btn btn-icon" onclick="closeDirPicker()">✕</button>
+            </div>
+            <div class="d-flex gap-2 mb-3">
+                <input type="text" id="picker-path" class="form-control" value="." readonly>
+                <button class="btn btn-icon" onclick="createDir()" title="Создать папку"
+                    style="border: 1px solid var(--border-color);">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                        <line x1="12" y1="11" x2="12" y2="17"></line>
+                        <line x1="9" y1="14" x2="15" y2="14"></line>
+                    </svg>
+                </button>
+                <button class="btn btn-primary" onclick="selectCurrentDir()">Выбрать</button>
+            </div>
+            <div id="picker-list"
+                style="flex-grow: 1; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 4px;">
+            </div>
+        </div>
+    </div>
+
+
+
+    <style>
+        .tab-btn {
+            background: none;
+            border: none;
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            opacity: 0.7;
+            font-weight: 500;
+            border-bottom: 2px solid transparent;
+        }
+
+        .tab-btn.active {
+            opacity: 1;
+            border-bottom-color: var(--primary-color);
+            color: var(--primary-color);
+        }
+    </style>
+    <div class="card" style="padding: 0;">
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Имя / Заголовок</th>
+                        <th>Пути (Source / Index)</th>
+                        <th>Модель</th>
+                        <th>Статус</th>
+                        <th>Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ctx in ibs %}
+                    <tr>
+                        <td>
+                            <div style="font-weight: 600; color: var(--text-color); margin-bottom: 0.25rem;">
+                                <a href="/ib/{{ ctx.config.name }}" style="text-decoration: none; color: inherit;">
+                                    {{ ctx.config.title }}
+                                </a>
+                            </div>
+                            <div style="font-size: 0.85rem; color: var(--text-muted);">{{ ctx.config.name }}</div>
+                        </td>
+                        <td>
+                            <div style="font-size: 0.85rem; color: var(--text-muted); font-family: monospace;">
+                                Src: {{ ctx.config.source_dir }}<br>
+                                Idx: {{ ctx.config.index_dir }}
+                            </div>
+                        </td>
+                        <td>
+                            <span style="font-size: 0.9rem;">{{ ctx.config.embedding_model }}</span>
+                        </td>
+                        <td>
+                            <div class="status-badge">
+                                {% if ctx.status.running %}
+                                <span class="status-dot running"></span> Индексация ({{ ctx.status.files_processed }} /
+                                {{
+                                ctx.status.total_files }})
+                                {% else %}
+                                <span class="status-dot active"></span> Активен
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            <!-- Edit Button (Gear) -->
+                            <button class="btn btn-icon" title="Настройки" onclick="editIB(this)"
+                                data-name="{{ ctx.config.name }}" data-title="{{ ctx.config.title }}"
+                                data-source="{{ ctx.config.source_dir }}" data-index="{{ ctx.config.index_dir }}"
+                                data-model="{{ ctx.config.embedding_model }}"
+                                data-device="{{ ctx.config.embedding_device }}" data-engine="{{ ctx.config.vector_db }}"
+                                style="border: 1px solid var(--border-color); margin-right: 0.25rem;">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                    <path
+                                        d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                                    </path>
+                                </svg>
+                            </button>
+
+        </div>
         </td>
-    </tr>
-    {% endif %}
-    </tbody>
-    </table>
-</div>
-<div style="padding: 1rem; border-top: 1px solid var(--border-color); color: var(--text-muted); font-size: 0.9rem;">
-    Всего записей: {{ ibs|length }}
-</div>
-</div>
+        </tr>
+        {% endfor %}
 
-<script>
-    async function reindex(name, type) {
-        if (!confirm('Запустить ' + type + ' переиндексацию для ' + name + '?')) return;
-        try {
-            const res = await fetch('/api/ib/' + name + '/reindex/' + type, { method: 'POST' });
-            const data = await res.json();
-            if (data.error) alert(data.error);
-            else location.reload();
-        } catch (e) {
-            alert('Ошибка: ' + e);
+        {% if not ibs %}
+        <tr>
+            <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                Нет добавленных конфигураций
+            </td>
+        </tr>
+        {% endif %}
+        </tbody>
+        </table>
+    </div>
+    <div style="padding: 1rem; border-top: 1px solid var(--border-color); color: var(--text-muted); font-size: 0.9rem;">
+        Всего записей: {{ ibs|length }}
+    </div>
+    </div>
+
+    <script>
+        async function reindex(name, type) {
+            if (!confirm('Запустить ' + type + ' переиндексацию для ' + name + '?')) return;
+            try {
+                const res = await fetch('/api/ib/' + name + '/reindex/' + type, { method: 'POST' });
+                const data = await res.json();
+                if (data.error) alert(data.error);
+                else location.reload();
+            } catch (e) {
+                alert('Ошибка: ' + e);
+            }
         }
-    }
 
-    function editIB(btn) {
-        const data = btn.dataset;
-        const form = document.getElementById('add-form');
-        const ibForm = document.getElementById('ib-form');
+        function editIB(btn) {
+            const data = btn.dataset;
+            const form = document.getElementById('add-form');
+            const ibForm = document.getElementById('ib-form');
 
-        document.getElementById('form-title').innerText = 'Настройки ' + data.name;
-        document.getElementById('form-submit-btn').innerText = 'Сохранить';
+            document.getElementById('form-title').innerText = 'Настройки ' + data.name;
+            document.getElementById('form-submit-btn').innerText = 'Сохранить';
 
-        ibForm.action = '/api/ib/update';
+            ibForm.action = '/api/ib/update';
 
-        // Fill fields
-        ibForm.name.value = data.name;
-        ibForm.name.readOnly = true; // Cannot change ID
-        ibForm.title.value = data.title;
-        ibForm.source_dir.value = data.source;
-        ibForm.index_dir.value = data.index;
-        ibForm.embedding_model.value = data.model;
-        ibForm.embedding_device.value = data.device || 'cpu';
-        ibForm.engine.value = data.engine;
+            // Fill fields
+            ibForm.name.value = data.name;
+            ibForm.name.readOnly = true; // Cannot change ID
+            ibForm.title.value = data.title;
+            ibForm.source_dir.value = data.source;
+            ibForm.index_dir.value = data.index;
+            ibForm.embedding_model.value = data.model;
+            ibForm.embedding_device.value = data.device || 'cpu';
+            ibForm.engine.value = data.engine;
 
-        document.getElementById('edit-actions').style.display = 'flex';
+            document.getElementById('edit-actions').style.display = 'flex';
 
-        form.style.display = 'block';
-        window.scrollTo(0, 0);
-    }
-
-    function deleteIB() {
-        const name = document.getElementById('ib-form').name.value;
-        if (!confirm(`Удалить конфигурацию ${name}?\nВНИМАНИЕ: Это также удалит папку с индексом!`)) return;
-
-        const form = document.getElementById('delete-form');
-        form.action = `/api/ib/${name}/delete`;
-        form.submit();
-    }
-
-    async function reindexCurrent() {
-        const name = document.getElementById('ib-form').name.value;
-        if (!confirm(`Пересоздать индекс для ${name} с нуля?`)) return;
-
-        try {
-            const res = await fetch(`/api/ib/${name}/reindex/full`, { method: 'POST' });
-            const data = await res.json();
-            if (data.error) alert(data.error);
-            else {
-                alert('Реиндексация запущена');
-                location.reload();
-            }
-        } catch (e) {
-            alert(e);
+            form.style.display = 'block';
+            window.scrollTo(0, 0);
         }
-    }
 
-    // Reset form when clicking add
-    function openAddForm() {
-        const form = document.getElementById('add-form');
-        const ibForm = document.getElementById('ib-form');
+        function deleteIB() {
+            const name = document.getElementById('ib-form').name.value;
+            if (!confirm(`Удалить конфигурацию ${name}?\nВНИМАНИЕ: Это также удалит папку с индексом!`)) return;
 
-        document.getElementById('form-title').innerText = 'Добавить конфигурацию';
-        document.getElementById('form-submit-btn').innerText = 'Создать';
-        document.getElementById('edit-actions').style.display = 'none';
-
-        ibForm.action = '/api/ib/add';
-        ibForm.reset();
-        ibForm.name.readOnly = false;
-
-        form.style.display = 'block';
-    }
-
-    // Directory Picker Logic
-    let currentPickerTarget = null;
-
-    function openDirPicker(targetId) {
-        currentPickerTarget = targetId;
-        document.getElementById('dir-picker').style.display = 'flex';
-        loadDir('.');
-    }
-
-    function closeDirPicker() {
-        document.getElementById('dir-picker').style.display = 'none';
-        currentPickerTarget = null;
-    }
-
-    function selectCurrentDir() {
-        if (currentPickerTarget) {
-            document.getElementById(currentPickerTarget).value = document.getElementById('picker-path').value;
+            const form = document.getElementById('delete-form');
+            form.action = `/api/ib/${name}/delete`;
+            form.submit();
         }
-        closeDirPicker();
-    }
 
-    async function createDir() {
-        const name = prompt("Введите имя новой папки:");
-        if (!name) return;
+        async function reindexCurrent() {
+            const name = document.getElementById('ib-form').name.value;
+            if (!confirm(`Пересоздать индекс для ${name} с нуля?`)) return;
 
-        const currentPath = document.getElementById('picker-path').value;
-        try {
-            const formData = new FormData();
-            formData.append('path', currentPath);
-            formData.append('name', name);
-            const res = await fetch('/api/system/mkdir', { method: 'POST', body: formData });
-
-            if (!res.ok) {
-                alert('Ошибка сервера: ' + res.status);
-                return;
+            try {
+                const res = await fetch(`/api/ib/${name}/reindex/full`, { method: 'POST' });
+                const data = await res.json();
+                if (data.error) alert(data.error);
+                else {
+                    alert('Реиндексация запущена');
+                    location.reload();
+                }
+            } catch (e) {
+                alert(e);
             }
-
-            const data = await res.json();
-
-            if (data.error) {
-                alert(data.error);
-            } else {
-                loadDir(currentPath); // Reload current dir to see new folder
-            }
-        } catch (e) {
-            alert('Ошибка: ' + e);
         }
-    }
 
-    async function loadDir(path) {
-        try {
-            const formData = new FormData();
-            formData.append('path', path);
-            const res = await fetch('/api/system/fs', { method: 'POST', body: formData });
+        // Reset form when clicking add
+        function openAddForm() {
+            const form = document.getElementById('add-form');
+            const ibForm = document.getElementById('ib-form');
 
-            if (!res.ok) {
-                const errText = await res.text();
-                // Try parsing JSON error
-                try {
-                    const errJson = JSON.parse(errText);
-                    if (errJson.detail) {
-                        alert('Ошибка валидации (422): ' + JSON.stringify(errJson.detail));
-                        return;
-                    }
-                } catch (e) { }
+            document.getElementById('form-title').innerText = 'Добавить конфигурацию';
+            document.getElementById('form-submit-btn').innerText = 'Создать';
+            document.getElementById('edit-actions').style.display = 'none';
 
-                alert('Ошибка сервера (' + res.status + '): ' + errText);
-                return;
+            ibForm.action = '/api/ib/add';
+            ibForm.reset();
+            ibForm.name.readOnly = false;
+
+            form.style.display = 'block';
+        }
+
+        // Directory Picker Logic
+        let currentPickerTarget = null;
+
+        function openDirPicker(targetId) {
+            currentPickerTarget = targetId;
+            document.getElementById('dir-picker').style.display = 'flex';
+            loadDir('.');
+        }
+
+        function closeDirPicker() {
+            document.getElementById('dir-picker').style.display = 'none';
+            currentPickerTarget = null;
+        }
+
+        function selectCurrentDir() {
+            if (currentPickerTarget) {
+                document.getElementById(currentPickerTarget).value = document.getElementById('picker-path').value;
             }
+            closeDirPicker();
+        }
 
-            const data = await res.json();
+        async function createDir() {
+            const name = prompt("Введите имя новой папки:");
+            if (!name) return;
 
-            if (data.error) {
-                alert(data.error);
-                return;
-            }
+            const currentPath = document.getElementById('picker-path').value;
+            try {
+                const formData = new FormData();
+                formData.append('path', currentPath);
+                formData.append('name', name);
+                const res = await fetch('/api/system/mkdir', { method: 'POST', body: formData });
 
-            document.getElementById('picker-path').value = data.current;
-
-            const list = document.getElementById('picker-list');
-            list.innerHTML = '';
-
-            // Parent dir
-            if (path !== data.current) {
-                // Backend sends '..' in dirs list
-            }
-
-            data.dirs.forEach(d => {
-                const item = document.createElement('div');
-                item.style.padding = '0.5rem 1rem';
-                item.style.cursor = 'pointer';
-                item.style.borderBottom = '1px solid #eee';
-                item.style.display = 'flex';
-                item.style.alignItems = 'center';
-                item.style.gap = '0.5rem';
-
-                // Icon
-                let icon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6c757d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>';
-                if (d.name === '..') {
-                    icon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6c757d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>';
+                if (!res.ok) {
+                    alert('Ошибка сервера: ' + res.status);
+                    return;
                 }
 
-                item.innerHTML = `
+                const data = await res.json();
+
+                if (data.error) {
+                    alert(data.error);
+                } else {
+                    loadDir(currentPath); // Reload current dir to see new folder
+                }
+            } catch (e) {
+                alert('Ошибка: ' + e);
+            }
+        }
+
+        async function loadDir(path) {
+            try {
+                const formData = new FormData();
+                formData.append('path', path);
+                const res = await fetch('/api/system/fs', { method: 'POST', body: formData });
+
+                if (!res.ok) {
+                    const errText = await res.text();
+                    // Try parsing JSON error
+                    try {
+                        const errJson = JSON.parse(errText);
+                        if (errJson.detail) {
+                            alert('Ошибка валидации (422): ' + JSON.stringify(errJson.detail));
+                            return;
+                        }
+                    } catch (e) { }
+
+                    alert('Ошибка сервера (' + res.status + '): ' + errText);
+                    return;
+                }
+
+                const data = await res.json();
+
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+
+                document.getElementById('picker-path').value = data.current;
+
+                const list = document.getElementById('picker-list');
+                list.innerHTML = '';
+
+                // Parent dir
+                if (path !== data.current) {
+                    // Backend sends '..' in dirs list
+                }
+
+                data.dirs.forEach(d => {
+                    const item = document.createElement('div');
+                    item.style.padding = '0.5rem 1rem';
+                    item.style.cursor = 'pointer';
+                    item.style.borderBottom = '1px solid #eee';
+                    item.style.display = 'flex';
+                    item.style.alignItems = 'center';
+                    item.style.gap = '0.5rem';
+
+                    // Icon
+                    let icon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6c757d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>';
+                    if (d.name === '..') {
+                        icon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6c757d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>';
+                    }
+
+                    item.innerHTML = `
                     ${icon}
                     <span>${d.name}</span>
                 `;
 
-                item.onclick = () => loadDir(d.path);
-                item.onmouseover = () => item.style.backgroundColor = '#f8f9fa';
-                item.onmouseout = () => item.style.backgroundColor = 'transparent';
+                    item.onclick = () => loadDir(d.path);
+                    item.onmouseover = () => item.style.backgroundColor = '#f8f9fa';
+                    item.onmouseout = () => item.style.backgroundColor = 'transparent';
 
-                list.appendChild(item);
-            });
+                    list.appendChild(item);
+                });
 
-        } catch (e) {
-            console.error(e);
-            alert('Ошибка сети или скрипта: ' + e);
+            } catch (e) {
+                console.error(e);
+                alert('Ошибка сети или скрипта: ' + e);
+            }
         }
-    }
 
-    // Server Paths from Jinja2
-    const SERVER_CONFIG = {
-        repoPath: String.raw`{{ repo_path }}`.replace(/\\/g, '/'), // Force forward slashes for cross-platform compatibility or handle escapes
-        pythonPath: String.raw`{{ python_path }}`.replace(/\\/g, '/')
-    };
+        // Server Paths from Jinja2
+        const SERVER_CONFIG = {
+            repoPath: String.raw`{{ repo_path }}`.replace(/\\/g, '/'), // Force forward slashes for cross-platform compatibility or handle escapes
+            pythonPath: String.raw`{{ python_path }}`.replace(/\\/g, '/')
+        };
 
 
-</script>
+    </script>
 
-{% endblock %}
+    {% endblock %}

@@ -1,9 +1,24 @@
 """Гибридный поиск."""
 import re
+import threading
 import pymorphy3
 
 from ..model_manager import ModelManager
 from ..vector_db import VectorDB
+
+
+# Синглтон для MorphAnalyzer (инициализация ~20 сек, делаем один раз)
+_morph_instance = None
+_morph_lock = threading.Lock()
+
+def get_morph_analyzer():
+    """Получить единственный экземпляр MorphAnalyzer."""
+    global _morph_instance
+    if _morph_instance is None:
+        with _morph_lock:
+            if _morph_instance is None:
+                _morph_instance = pymorphy3.MorphAnalyzer()
+    return _morph_instance
 
 
 class HybridSearch:
@@ -14,13 +29,13 @@ class HybridSearch:
         self.collection_name = collection_name
         self.model_name = model_name
         self.embedding_device = embedding_device
-        self.morph = pymorphy3.MorphAnalyzer()
         self.model_manager = ModelManager()
 
     def normalize(self, text: str) -> str:
         """Нормализация текста (лемматизация)."""
+        morph = get_morph_analyzer()
         words = re.findall(r"[а-яёa-z0-9]+", text.lower())
-        return " ".join(self.morph.parse(w)[0].normal_form for w in words)
+        return " ".join(morph.parse(w)[0].normal_form for w in words)
 
     def search(self, query: str, top_k: int = 5) -> list[dict]:
         """Выполнить гибридный поиск."""

@@ -67,7 +67,7 @@ def main():
     except KeyboardInterrupt:
         logger.info("Остановка по KeyboardInterrupt...")
         # Stop background threads
-        for ctx in ib_manager.get_all_contexts():
+        for ctx in ib_manager.get_working_contexts():
             ctx.stop_maintenance()
 
 

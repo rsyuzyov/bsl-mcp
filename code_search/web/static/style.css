@@ -265,6 +265,10 @@ tr:last-child td {
     animation: pulse 1.5s infinite;
 }
 
+.status-dot.error {
+    background-color: #dc2626;
+}
+
 @keyframes pulse {
     0% {
         opacity: 1;

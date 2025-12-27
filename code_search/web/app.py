@@ -70,10 +70,36 @@ def create_app(ib_manager: IBManager) -> FastAPI:
     @app.get("/api/init-status")
     async def get_init_status():
         """Статус инициализации ИБ."""
+        # Получаем статус моделей
+        model_mgr = ModelManager()
+        models_status = []
+        for (model_name, device), info in model_mgr.models.items():
+            models_status.append({
+                "name": model_name,
+                "device": device,
+                "loading": info.loading,
+                "error": info.error
+            })
+        
+        # Определяем текущий этап
+        if ib_manager.is_initializing:
+            stage = "ib_init"
+            stage_text = "Инициализация баз..."
+        elif any(m["loading"] for m in models_status):
+            stage = "model_loading"
+            stage_text = "Загрузка модели эмбеддинга..."
+        else:
+            stage = "ready"
+            stage_text = "Готово"
+        
         return {
             "is_initializing": ib_manager.is_initializing,
             "loaded_count": len(ib_manager.contexts),
-            "config_count": len(ib_manager.config_manager.config.ibs)
+            "error_count": len(ib_manager.error_contexts),
+            "config_count": len(ib_manager.config_manager.config.ibs),
+            "stage": stage,
+            "stage_text": stage_text,
+            "models": models_status
         }
     
     @app.get("/search", response_class=HTMLResponse)
@@ -105,11 +131,6 @@ def create_app(ib_manager: IBManager) -> FastAPI:
         if not ctx:
             return HTMLResponse("ИБ не найдена", status_code=404)
         
-        # Reuse list template or separate? 
-        # For now maybe just redirect to home or show detailed view?
-        # User asked for "Sections: Config, Search, Info". 
-        # Detailed view is probably part of Config logic or Search.
-        # Let's keep it simple for now, maybe render a specific template.
         return templates.TemplateResponse("ib.html", {
             "request": request,
             "ctx": ctx,
@@ -183,6 +204,13 @@ def create_app(ib_manager: IBManager) -> FastAPI:
         if not ctx:
             raise HTTPException(404, "IB not found")
         
+        # Проверка на ошибочный контекст
+        if ctx.is_error:
+            return {
+                "error": ctx.error,
+                "locking_pid": getattr(ctx, 'locking_pid', None)
+            }
+        
         progress = ctx.status.format_progress(ctx.engine.get_collection_count())
         return progress
 
@@ -191,6 +219,8 @@ def create_app(ib_manager: IBManager) -> FastAPI:
         ctx = ib_manager.get_context(name)
         if not ctx:
             raise HTTPException(404, "IB not found")
+        if ctx.is_error:
+            raise HTTPException(503, f"ИБ недоступна: {ctx.error}")
         return ctx.searcher.search(q)
 
     @app.post("/api/ib/{name}/reindex/full")
@@ -198,6 +228,8 @@ def create_app(ib_manager: IBManager) -> FastAPI:
         ctx = ib_manager.get_context(name)
         if not ctx:
            raise HTTPException(404, "IB not found")
+        if ctx.is_error:
+           return {"error": f"ИБ недоступна: {ctx.error}"}
         
         if ctx.status.running:
              return {"error": "Индексация уже запущена"}
@@ -210,6 +242,8 @@ def create_app(ib_manager: IBManager) -> FastAPI:
         ctx = ib_manager.get_context(name)
         if not ctx:
            raise HTTPException(404, "IB not found")
+        if ctx.is_error:
+           return {"error": f"ИБ недоступна: {ctx.error}"}
         
         if ctx.status.running:
              return {"error": "Индексация уже запущена"}
@@ -237,10 +271,9 @@ def create_app(ib_manager: IBManager) -> FastAPI:
                  results = ctx.searcher.search(q_text)
                  return {"content": [{"type": "text", "text": str(results)}], "isError": False}
         
-        # If no IB specified, search all?
-        # For now, just search the first one or return help
+        # If no IB specified, search all working IBs
         all_res = []
-        for ctx in ib_manager.get_all_contexts():
+        for ctx in ib_manager.get_working_contexts():
              res = ctx.searcher.search(query, top_k=3)
              for r in res:
                  r["ib"] = ctx.config.name

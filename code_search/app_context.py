@@ -4,11 +4,14 @@ import time
 from dataclasses import dataclass, field
 from queue import Queue
 
+from typing import Optional
+
 from .config_manager import IBConfig, ConfigManager
 from .indexer.engine import IndexEngine
 from .search.hybrid import HybridSearch
 from .config import IndexingStatus
 from .logger import get_logger
+from .utils import check_index_lock
 
 logger = get_logger("app.context")
 
@@ -19,10 +22,17 @@ class IBContext:
     engine: IndexEngine
     searcher: HybridSearch
     status: IndexingStatus = field(default_factory=IndexingStatus)
+    error: Optional[str] = None  # Сообщение об ошибке (если есть)
+    locking_pid: Optional[int] = None  # PID процесса-блокировщика
     
     # Управление фоновыми задачами
     stop_event: threading.Event = field(default_factory=threading.Event)
     worker_thread: threading.Thread | None = None
+    
+    @property
+    def is_error(self) -> bool:
+        """Контекст в состоянии ошибки?"""
+        return self.error is not None
 
     def start_maintenance(self):
         """Запуск фонового обслуживания (индексации)."""
@@ -58,12 +68,30 @@ class IBContext:
                 break
 
 
+@dataclass 
+class ErrorIBContext:
+    """Контекст ИБ в состоянии ошибки (не инициализирована)."""
+    config: IBConfig
+    error: str
+    locking_pid: Optional[int] = None
+    
+    @property
+    def is_error(self) -> bool:
+        return True
+    
+    @property
+    def status(self) -> IndexingStatus:
+        """Фиктивный статус для совместимости с UI."""
+        return IndexingStatus()
+
+
 class IBManager:
     """Менеджер всех активных ИБ."""
 
     def __init__(self, config_manager: ConfigManager):
         self.config_manager = config_manager
         self.contexts: dict[str, IBContext] = {}
+        self.error_contexts: dict[str, ErrorIBContext] = {}  # ИБ в состоянии ошибки
         self.is_initializing: bool = False
         self._init_thread: threading.Thread | None = None
 
@@ -85,6 +113,17 @@ class IBManager:
 
     def _init_ib(self, ib_conf: IBConfig):
         """Инициализация одной ИБ."""
+        # Сначала проверяем блокировку папки индекса
+        is_locked, pid, lock_message = check_index_lock(ib_conf.index_dir)
+        if is_locked:
+            logger.error(f"ИБ {ib_conf.name}: папка индекса заблокирована! {lock_message}")
+            self.error_contexts[ib_conf.name] = ErrorIBContext(
+                config=ib_conf,
+                error=lock_message or "Папка индекса заблокирована другим процессом",
+                locking_pid=pid
+            )
+            return
+        
         try:
             logger.info(f"Инициализация ИБ: {ib_conf.name}...")
             engine = IndexEngine(
@@ -105,7 +144,17 @@ class IBManager:
             ctx.start_maintenance()
             logger.info(f"ИБ {ib_conf.name} инициализирована")
         except Exception as e:
+            error_msg = str(e)
+            # Проверяем, не ошибка ли это блокировки от Qdrant
+            if "already accessed" in error_msg.lower():
+                pid = None  # Не смогли определить
+                error_msg = f"Папка индекса заблокирована: {error_msg}"
             logger.error(f"Ошибка инициализации ИБ {ib_conf.name}: {e}", exc_info=True)
+            self.error_contexts[ib_conf.name] = ErrorIBContext(
+                config=ib_conf,
+                error=error_msg,
+                locking_pid=pid if 'pid' in dir() else None
+            )
 
     def add_ib(self, ib_conf: IBConfig, overwrite: bool = False):
         """Добавление или обновление ИБ."""
@@ -139,8 +188,18 @@ class IBManager:
         if remove_config:
             self.config_manager.remove_ib(name)
 
-    def get_context(self, name: str) -> IBContext | None:
-        return self.contexts.get(name)
+    def get_context(self, name: str) -> IBContext | ErrorIBContext | None:
+        """Получить контекст ИБ (может быть в состоянии ошибки)."""
+        if name in self.contexts:
+            return self.contexts[name]
+        return self.error_contexts.get(name)
 
-    def get_all_contexts(self) -> list[IBContext]:
+    def get_all_contexts(self) -> list[IBContext | ErrorIBContext]:
+        """Все контексты, включая ошибочные."""
+        result = list(self.contexts.values())
+        result.extend(self.error_contexts.values())
+        return result
+    
+    def get_working_contexts(self) -> list[IBContext]:
+        """Только рабочие контексты (без ошибок)."""
         return list(self.contexts.values())

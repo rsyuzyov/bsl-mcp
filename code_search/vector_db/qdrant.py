@@ -110,6 +110,64 @@ class QdrantAdapter(VectorDB):
             from ..logger import get_logger
             get_logger("idx.qdrant").warning(f"Ошибка оптимизации: {e}")
 
+    def clear_and_compact(self, collection_name: str, vector_size: int):
+        """Удаляет все данные и сжимает SQLite хранилище."""
+        from ..logger import get_logger
+        log = get_logger("idx.qdrant")
+        
+        # 1. Удаляем коллекцию
+        try:
+            self.client.delete_collection(collection_name)
+            log.info(f"Коллекция {collection_name} удалена")
+        except Exception as e:
+            log.warning(f"Ошибка удаления коллекции: {e}")
+        
+        # 2. Закрываем клиент чтобы освободить файлы
+        self.close()
+        
+        # 3. DROP всех таблиц + VACUUM на sqlite файлах
+        import sqlite3
+        import time
+        time.sleep(0.5)  # Даём время освободить файлы
+        
+        sqlite_files = list(self.path.rglob("*.sqlite"))
+        for sqlite_file in sqlite_files:
+            try:
+                old_size = sqlite_file.stat().st_size
+                conn = sqlite3.connect(str(sqlite_file))
+                cursor = conn.cursor()
+                
+                # Получаем список таблиц
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                tables = [row[0] for row in cursor.fetchall()]
+                
+                # DROP всех таблиц (кроме системных)
+                for table in tables:
+                    if not table.startswith('sqlite_'):
+                        try:
+                            cursor.execute(f"DROP TABLE IF EXISTS {table}")
+                        except Exception:
+                            pass
+                
+                conn.commit()
+                conn.execute("VACUUM")
+                conn.close()
+                
+                new_size = sqlite_file.stat().st_size
+                log.info(f"Очистка {sqlite_file.name}: {old_size/1024/1024:.1f}MB -> {new_size/1024/1024:.1f}MB")
+            except Exception as e:
+                log.warning(f"Ошибка очистки {sqlite_file}: {e}")
+        
+        # 4. Переоткрываем клиент
+        try:
+            self.client = QdrantClient(path=str(self.path), timeout=5.0, check_compatibility=False)
+        except TypeError:
+            self.client = QdrantClient(path=str(self.path))
+        
+        # 5. Создаём пустую коллекцию
+        self.create_collection(collection_name, vector_size)
+        log.info(f"Коллекция {collection_name} пересоздана")
+
     def close(self):
         if hasattr(self.client, 'close'):
             self.client.close()

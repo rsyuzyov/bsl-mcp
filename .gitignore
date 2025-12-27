@@ -25,4 +25,13 @@ tmp/
 logs/
 
 # Models
-.onnx*
+*.onnx
+*.onnx.data
+.onnx_cache*/
+
+# Agent
+.agent/
+
+# Runtime data
+.last_ibs.json
+indexes/

@@ -2,6 +2,7 @@
 import threading
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from queue import Queue
 
 from typing import Optional
@@ -115,6 +116,7 @@ class IBManager:
         self.current_init_ib: Optional[str] = None # Name of the IB currently being initialized
         self.current_init_stage: str = "" # Detaled initialization stage
         self._init_thread: threading.Thread | None = None # Kept for compatibility with existing async_init if not fully replaced
+        self._last_ibs_file = Path(".last_ibs.json")  # Файл со списком ИБ предыдущего запуска
 
     def initialize(self):
         """Синхронная инициализация всех ИБ из конфига (запускается в потоке)."""
@@ -125,6 +127,9 @@ class IBManager:
         self.error_contexts.clear()
         
         try:
+            # Очистка данных удалённых ИБ
+            self._cleanup_removed_ibs()
+            
             # Сначала проверяем, есть ли конфигурации
             if not self.config_manager.config.ibs:
                 logger.info("Нет конфигураций для инициализации")
@@ -144,6 +149,9 @@ class IBManager:
                 
             total_duration = time.time() - start_total
             logger.info(f"Инициализация всех ИБ завершена за {total_duration:.2f} сек")
+            
+            # Сохраняем список ИБ для следующего запуска
+            self._save_last_ibs()
         finally:
             self.current_init_ib = None
             self.current_init_stage = ""
@@ -156,6 +164,46 @@ class IBManager:
             return
         self._init_thread = threading.Thread(target=self.initialize, daemon=True)
         self._init_thread.start()
+
+    def _save_last_ibs(self):
+        """Сохранить список ИБ для отслеживания удалённых."""
+        import json
+        ibs_data = {
+            ib.name: ib.index_dir 
+            for ib in self.config_manager.config.ibs
+        }
+        try:
+            with open(self._last_ibs_file, "w", encoding="utf-8") as f:
+                json.dump(ibs_data, f)
+        except Exception as e:
+            logger.warning(f"Не удалось сохранить список ИБ: {e}")
+
+    def _cleanup_removed_ibs(self):
+        """Удалить index_dir для ИБ, удалённых из конфига."""
+        import json
+        import shutil
+        
+        if not self._last_ibs_file.exists():
+            return
+        
+        try:
+            with open(self._last_ibs_file, "r", encoding="utf-8") as f:
+                last_ibs = json.load(f)
+        except Exception:
+            return
+        
+        current_names = {ib.name for ib in self.config_manager.config.ibs}
+        
+        for name, index_dir in last_ibs.items():
+            if name not in current_names:
+                index_path = Path(index_dir)
+                if index_path.exists() and index_path.is_dir():
+                    logger.info(f"ИБ '{name}' удалена из конфига, удаляю каталог: {index_dir}")
+                    try:
+                        shutil.rmtree(index_path)
+                        logger.info(f"Каталог {index_dir} удалён")
+                    except Exception as e:
+                        logger.error(f"Не удалось удалить каталог {index_dir}: {e}")
 
     def _set_init_stage(self, stage: str):
         """Установить текущий этап инициализации и записать в лог."""

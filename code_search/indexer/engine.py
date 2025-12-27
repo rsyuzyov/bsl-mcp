@@ -35,10 +35,18 @@ class IndexEngine:
         self.scan_workers = scan_workers
         
         self.meta_file = self.index_dir / "file_hashes.json"
+        self.reindex_flag = self.index_dir / "reindex_pending"
         
         self.index_dir.mkdir(exist_ok=True, parents=True)
         
         self.logger = get_logger(f"idx.{collection_name}")
+        
+        # Проверяем флаг отложенного reindex
+        if self.reindex_flag.exists():
+            self.logger.info("Обнаружен флаг reindex_pending, очистка базы...")
+            self._cleanup_qdrant_storage()
+            self.reindex_flag.unlink(missing_ok=True)
+            self.logger.info("Отложенный reindex выполнен")
         
         t0 = time.time()
         self.logger.info(f"Подключение к vector_db ({vector_db_type})...")
@@ -51,9 +59,13 @@ class IndexEngine:
         t1 = time.time()
         self._ensure_collection()
         
-        # Оптимизация WAL при старте для ускорения загрузки
-        self.db.optimize(self.collection_name)
-        self.logger.info(f"Коллекция проверена за {time.time() - t1:.2f} сек")
+        # Оптимизация WAL при старте — только если коллекция не пустая
+        count = self.db.count(self.collection_name)
+        if count > 0:
+            self.db.optimize(self.collection_name)
+            self.logger.info(f"Коллекция ({count} точек) оптимизирована за {time.time() - t1:.2f} сек")
+        else:
+            self.logger.info(f"Коллекция пустая, оптимизация пропущена")
         
         self.model_manager = ModelManager()
         self.batch_counter = 0
@@ -61,6 +73,48 @@ class IndexEngine:
     def _ensure_collection(self):
         """Создать коллекцию если не существует."""
         self.db.create_collection(self.collection_name, self.vector_size)
+
+    def _cleanup_qdrant_storage(self):
+        """Очистка хранилища Qdrant (используется при отложенном reindex)."""
+        import sqlite3
+        qdrant_storage = self.index_dir / "qdrant"
+        
+        # Удаляем хэши
+        if self.meta_file.exists():
+            self.meta_file.unlink()
+            self.logger.info("Хэши удалены")
+        
+        if not qdrant_storage.exists():
+            return
+        
+        # Очищаем все sqlite файлы
+        sqlite_files = list(qdrant_storage.rglob("*.sqlite"))
+        for sqlite_file in sqlite_files:
+            try:
+                old_size = sqlite_file.stat().st_size
+                conn = sqlite3.connect(str(sqlite_file))
+                cursor = conn.cursor()
+                
+                # Получаем список таблиц
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                tables = [row[0] for row in cursor.fetchall()]
+                
+                # DROP всех таблиц (кроме системных)
+                for table in tables:
+                    if not table.startswith('sqlite_'):
+                        try:
+                            cursor.execute(f"DROP TABLE IF EXISTS {table}")
+                        except Exception:
+                            pass
+                
+                conn.commit()
+                conn.execute("VACUUM")
+                conn.close()
+                
+                new_size = sqlite_file.stat().st_size
+                self.logger.info(f"Очистка {sqlite_file.name}: {old_size/1024/1024:.1f}MB -> {new_size/1024/1024:.1f}MB")
+            except Exception as e:
+                self.logger.warning(f"Ошибка очистки {sqlite_file}: {e}")
 
     def close(self):
         """Закрыть соединение с БД."""
@@ -169,38 +223,24 @@ class IndexEngine:
         self.logger.info(f"Запуск полной переиндексации...")
         
         try:
-            # Удаляем хэши СРАЗУ, чтобы при ошибке они не остались
+            # Создаём флаг ПЕРВЫМ — если что-то пойдёт не так, при следующем старте очистим
+            self.reindex_flag.touch()
+            self.logger.info("Флаг reindex_pending установлен")
+            
+            # Удаляем хэши
             if self.meta_file.exists():
                 self.meta_file.unlink()
                 self.logger.info("Хэши удалены")
             
-            # Удаляем коллекцию
-            t_del = time.time()
-            self.logger.info("Удаление коллекции...")
-            self.db.delete_collection(self.collection_name)
-            self.logger.info(f"Коллекция удалена за {time.time() - t_del:.2f} сек")
+            # Очистка коллекции и сжатие хранилища (VACUUM)
+            t_clean = time.time()
+            self.logger.info("Очистка и сжатие БД...")
+            self.db.clear_and_compact(self.collection_name, self.vector_size)
+            self.logger.info(f"БД очищена и сжата за {time.time() - t_clean:.2f} сек")
             
-            # Для Qdrant embedded: очищаем папку данных для удаления мусора
-            qdrant_storage = self.index_dir / "qdrant"
-            if qdrant_storage.exists():
-                import shutil
-                # Закрываем соединение перед очисткой
-                t_clean = time.time()
-                self.logger.info("Очистка папки Qdrant...")
-                self.db.close()
-                shutil.rmtree(qdrant_storage, ignore_errors=True)
-                self.logger.info(f"Папка Qdrant очищена за {time.time() - t_clean:.2f} сек")
-                # Переподключаемся
-                t_reconnect = time.time()
-                self.logger.info("Переподключение к Qdrant...")
-                from ..vector_db import get_vector_db
-                self.db = get_vector_db(self.vector_db_type, str(self.index_dir))
-                self.logger.info(f"Переподключено за {time.time() - t_reconnect:.2f} сек")
-            
-            t_create = time.time()
-            self.logger.info("Создание коллекции...")
-            self.db.create_collection(self.collection_name, self.vector_size)
-            self.logger.info(f"Коллекция создана за {time.time() - t_create:.2f} сек")
+            # Флаг можно удалить — база очищена успешно
+            self.reindex_flag.unlink(missing_ok=True)
+            self.logger.info("Флаг reindex_pending снят")
             
             t_scan = time.time()
             self.logger.info("Сканирование файлов...")

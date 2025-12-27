@@ -387,8 +387,21 @@
             try {
                 const res = await fetch('/api/ib/' + name + '/reindex/' + type, { method: 'POST' });
                 const data = await res.json();
-                if (data.error) alert(data.error);
-                else location.reload();
+                if (data.error && data.running) {
+                    // Индексация уже запущена — спрашиваем остановить?
+                    const modeText = data.mode === 'full' ? 'полная' : 'инкрементальная';
+                    if (confirm(`Сейчас идёт ${modeText} индексация.\n\nОстановить её и запустить новую?`)) {
+                        // Повторяем с force=true
+                        const res2 = await fetch('/api/ib/' + name + '/reindex/' + type + '?force=true', { method: 'POST' });
+                        const data2 = await res2.json();
+                        if (data2.error) alert(data2.error);
+                        else location.reload();
+                    }
+                } else if (data.error) {
+                    alert(data.error);
+                } else {
+                    location.reload();
+                }
             } catch (e) {
                 alert('Ошибка: ' + e);
             }
@@ -436,8 +449,20 @@
             try {
                 const res = await fetch(`/api/ib/${name}/reindex/full`, { method: 'POST' });
                 const data = await res.json();
-                if (data.error) alert(data.error);
-                else {
+                if (data.error && data.running) {
+                    const modeText = data.mode === 'full' ? 'полная' : 'инкрементальная';
+                    if (confirm(`Сейчас идёт ${modeText} индексация.\n\nОстановить её и запустить полную переиндексацию?`)) {
+                        const res2 = await fetch(`/api/ib/${name}/reindex/full?force=true`, { method: 'POST' });
+                        const data2 = await res2.json();
+                        if (data2.error) alert(data2.error);
+                        else {
+                            alert('Реиндексация запущена');
+                            location.reload();
+                        }
+                    }
+                } else if (data.error) {
+                    alert(data.error);
+                } else {
                     alert('Реиндексация запущена');
                     location.reload();
                 }

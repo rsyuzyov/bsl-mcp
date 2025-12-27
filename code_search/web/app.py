@@ -244,8 +244,28 @@ def create_app(ib_manager: IBManager) -> FastAPI:
             raise HTTPException(503, f"ИБ недоступна: {ctx.error}")
         return ctx.searcher.search(q)
 
+    @app.post("/api/ib/{name}/reindex/stop")
+    async def reindex_stop(name: str):
+        """Остановить текущую индексацию."""
+        ctx = ib_manager.get_context(name)
+        if not ctx:
+           raise HTTPException(404, "IB not found")
+        
+        if not ctx.status.running:
+            return {"error": "Индексация не запущена"}
+        
+        # Устанавливаем stop_event для graceful остановки
+        if ctx.stop_event:
+            ctx.stop_event.set()
+            ctx.status.running = False
+            return {"stopped": True}
+        
+        # Принудительная остановка через флаг
+        ctx.status.running = False
+        return {"stopped": True}
+
     @app.post("/api/ib/{name}/reindex/full")
-    async def reindex_full(name: str):
+    async def reindex_full(name: str, force: bool = False):
         ctx = ib_manager.get_context(name)
         if not ctx:
            raise HTTPException(404, "IB not found")
@@ -253,13 +273,21 @@ def create_app(ib_manager: IBManager) -> FastAPI:
            return {"error": f"ИБ недоступна: {ctx.error}"}
         
         if ctx.status.running:
-             return {"error": "Индексация уже запущена"}
+            if not force:
+                return {"error": "Индексация уже запущена", "running": True, "mode": ctx.status.mode}
+            # Остановка текущей
+            if ctx.stop_event:
+                ctx.stop_event.set()
+            ctx.status.running = False
+            # Небольшая пауза для завершения
+            import time
+            time.sleep(0.5)
              
         threading.Thread(target=ctx.engine.full_reindex, args=(ctx.status,), daemon=True).start()
         return {"started": True}
 
     @app.post("/api/ib/{name}/reindex/incremental")
-    async def reindex_incremental(name: str):
+    async def reindex_incremental(name: str, force: bool = False):
         ctx = ib_manager.get_context(name)
         if not ctx:
            raise HTTPException(404, "IB not found")
@@ -267,7 +295,14 @@ def create_app(ib_manager: IBManager) -> FastAPI:
            return {"error": f"ИБ недоступна: {ctx.error}"}
         
         if ctx.status.running:
-             return {"error": "Индексация уже запущена"}
+            if not force:
+                return {"error": "Индексация уже запущена", "running": True, "mode": ctx.status.mode}
+            # Остановка текущей
+            if ctx.stop_event:
+                ctx.stop_event.set()
+            ctx.status.running = False
+            import time
+            time.sleep(0.5)
              
         threading.Thread(target=ctx.engine.incremental_reindex, args=(ctx.status,), daemon=True).start()
         return {"started": True}

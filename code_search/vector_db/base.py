@@ -49,6 +49,11 @@ class VectorDB(ABC):
         """Оптимизация коллекции (очистка WAL, сжатие). По умолчанию ничего не делает."""
         pass
 
+    def clear_and_compact(self, collection_name: str, vector_size: int):
+        """Полная очистка коллекции и сжатие хранилища. По умолчанию delete+create."""
+        self.delete_collection(collection_name)
+        self.create_collection(collection_name, vector_size)
+
     def close(self):
         """Закрыть соединение."""
         pass

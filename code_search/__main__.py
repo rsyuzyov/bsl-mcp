@@ -7,6 +7,11 @@ Usage: python -m code_search
 import socket
 import threading
 import sys
+import os
+
+# Отключаем телеметрию Qdrant ДО всех импортов
+os.environ["QDRANT_TELEMETRY_DISABLED"] = "1"
+
 import uvicorn
 from pathlib import Path
 
@@ -53,9 +58,6 @@ def main():
     
     # 5. Создание приложения (сразу доступен веб-интерфейс)
     app = create_app(ib_manager)
-    
-    # 6. Запуск инициализации ИБ в фоновом потоке
-    ib_manager.initialize_async()
     
     logger.info(f"Сервер доступен на http://localhost:{config.port}")
     if not config.ibs:

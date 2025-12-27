@@ -23,3 +23,8 @@ config.yaml
 Thumbs.db
 tmp/
 logs/
+
+# Models
+.onnx_cache_v3/
+.onnx_cache_new/
+.onnx_cache/

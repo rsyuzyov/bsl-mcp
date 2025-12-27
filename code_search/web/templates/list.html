@@ -23,18 +23,25 @@
 <!-- Initializing Banner -->
 {% if is_initializing or (config_ibs_count > 0 and ibs|length < config_ibs_count) %} <div id="init-banner" class="card"
     style="margin-bottom: 1rem; padding: 1rem; display: flex; align-items: center; gap: 1rem; background: linear-gradient(135deg, rgba(79, 70, 229, 0.1) 0%, rgba(147, 51, 234, 0.1) 100%); border: 1px solid rgba(79, 70, 229, 0.3);">
-    <div class="spinner"
-        style="width: 24px; height: 24px; border: 3px solid rgba(79, 70, 229, 0.3); border-top-color: #4f46e5; border-radius: 50%; animation: spin 1s linear infinite; flex-shrink: 0;">
-    </div>
-    <div>
-        <div style="font-weight: 600; color: var(--text-color);">Загрузка конфигураций...</div>
-        <div style="font-size: 0.85rem; color: var(--text-muted);" id="init-status-text">
-            Инициализация моделей эмбеддинга. Это может занять несколько секунд.
-        </div>
+    <div id="init-spinner" class="init-spinner"></div>
+    <div style="flex: 1;">
+        <div id="init-title" style="font-weight: 600; color: var(--text-color);">Загрузка конфигураций...</div>
+        <div id="init-status-text" style="font-size: 0.85rem; color: var(--text-muted);">Инициализация моделей
+            эмбеддинга. Это может занять несколько секунд.</div>
     </div>
     </div>
     <style>
-        @keyframes spin {
+        .init-spinner {
+            width: 24px;
+            height: 24px;
+            min-width: 24px;
+            border: 3px solid rgba(79, 70, 229, 0.3);
+            border-top-color: #4f46e5;
+            border-radius: 50%;
+            animation: init-spin 1s linear infinite;
+        }
+
+        @keyframes init-spin {
             to {
                 transform: rotate(360deg);
             }
@@ -43,49 +50,66 @@
     <script>
         (function () {
             let checkCount = 0;
-            const maxChecks = 120; // 2 минуты
+            const maxChecks = 120;
 
             function checkInitStatus() {
                 fetch('/api/init-status')
                     .then(r => r.json())
                     .then(data => {
                         const banner = document.getElementById('init-banner');
+                        const spinner = document.getElementById('init-spinner');
+                        const titleEl = document.getElementById('init-title');
                         const statusText = document.getElementById('init-status-text');
-                        const titleEl = banner ? banner.querySelector('div > div:first-child') : null;
 
-                        // Проверяем готовность: нет инициализации И все модели загружены ИЛИ все ИБ загружены
                         const isReady = data.stage === 'ready' &&
                             (data.loaded_count + data.error_count) >= data.config_count;
 
                         if (isReady) {
-                            // Инициализация завершена
                             if (banner) {
                                 banner.style.background = 'linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(16, 185, 129, 0.1) 100%)';
                                 banner.style.borderColor = 'rgba(34, 197, 94, 0.3)';
-                                banner.querySelector('.spinner').style.display = 'none';
+                                if (spinner) spinner.style.display = 'none';
                                 if (titleEl) titleEl.textContent = 'Готово!';
-                                statusText.textContent = 'Загружено ' + data.loaded_count + ' конфигураций. Обновление страницы...';
+                                if (statusText) statusText.textContent = 'Загружено ' + data.loaded_count + ' конфигураций. Обновление страницы...';
                             }
                             setTimeout(() => location.reload(), 500);
                         } else {
-                            // Ещё загружается — показываем текущий этап
+                            // Обновляем заголовок этапа
                             if (titleEl) {
                                 titleEl.textContent = data.stage_text || 'Загрузка...';
                             }
+
+                            // Обновляем детальный текст
                             if (statusText) {
-                                let text = 'Загружено ' + data.loaded_count + ' из ' + data.config_count + ' конфигураций';
-                                if (data.error_count > 0) {
-                                    text += ' (ошибок: ' + data.error_count + ')';
-                                }
-                                // Показываем модели если есть
-                                if (data.models && data.models.length > 0) {
-                                    const loading = data.models.filter(m => m.loading);
-                                    if (loading.length > 0) {
-                                        text += '. Модель: ' + loading.map(m => m.name.split('/').pop()).join(', ');
+                                let text = '';
+
+                                // Если загрузка модели - пишем подробности о модели
+                                if (data.stage === 'model_loading' && data.models && data.models.length > 0) {
+                                    const loadingModel = data.models.find(m => m.loading);
+                                    if (loadingModel) {
+                                        text = `Загружается: ${loadingModel.name} (${loadingModel.device.toUpperCase()})`;
+                                    } else {
+                                        text = 'Подготовка моделей...';
                                     }
                                 }
+                                // Иначе пишем стандартный прогресс по базам
+                                else {
+                                    if (data.current_init_ib) {
+                                        const currentNum = data.loaded_count + 1;
+                                        const stageDetail = data.current_init_stage || 'инициализация...';
+                                        text = `Загрузка конфигураций ${currentNum} из ${data.config_count} (${data.current_init_ib}): ${stageDetail}`;
+                                    } else {
+                                        text = `Загружено ${data.loaded_count} из ${data.config_count} конфигураций`;
+                                    }
+
+                                    if (data.error_count > 0) {
+                                        text += ` (ошибок: ${data.error_count})`;
+                                    }
+                                }
+
                                 statusText.textContent = text;
                             }
+
                             checkCount++;
                             if (checkCount < maxChecks) {
                                 setTimeout(checkInitStatus, 1000);
@@ -99,14 +123,11 @@
                         }
                     });
             }
-
-            // Запуск проверки
             setTimeout(checkInitStatus, 1000);
         })();
     </script>
     {% endif %}
 
-    <!-- Add Form (Hidden by default) -->
     <!-- Add Form (Hidden by default) -->
     <div id="add-form" class="card" style="display: none;">
         <h3 style="margin-top: 0;" id="form-title">Добавить конфигурацию</h3>
@@ -121,7 +142,8 @@
                     <input type="text" name="title" class="form-control" placeholder="Зарплата и Управление Персоналом">
                 </div>
                 <div>
-                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Папка исходников</label>
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Папка
+                        исходников</label>
                     <div class="input-action-wrapper">
                         <input type="text" name="source_dir" id="source_dir" class="form-control" required
                             placeholder="C:\src\zup">
@@ -137,7 +159,8 @@
                     </div>
                 </div>
                 <div>
-                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Папка индекса</label>
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Папка
+                        индекса</label>
                     <div class="input-action-wrapper">
                         <input type="text" name="index_dir" id="index_dir" class="form-control" required
                             placeholder="C:\indexes\zup">
@@ -155,19 +178,24 @@
 
                 <!-- Models -->
                 <div>
-                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Модель эмбеддинга</label>
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Модель
+                        эмбеддинга</label>
                     <select name="embedding_model" class="form-control">
-                        <option value="cointegrated/rubert-tiny2" selected>cointegrated/rubert-tiny2 (Быстрая, CPU)
+                        <option value="cointegrated/rubert-tiny2" selected>cointegrated/rubert-tiny2 (Быстрая,
+                            CPU)
                         </option>
-                        <option value="intfloat/multilingual-e5-small">intfloat/multilingual-e5-small (Качественная)
+                        <option value="intfloat/multilingual-e5-small">intfloat/multilingual-e5-small
+                            (Качественная)
                         </option>
-                        <option value="ai-forever/sbert_large_nlu_ru">ai-forever/sbert_large_nlu_ru (Тяжелая)</option>
+                        <option value="ai-forever/sbert_large_nlu_ru">ai-forever/sbert_large_nlu_ru (Тяжелая)
+                        </option>
                     </select>
                 </div>
 
                 <!-- Device -->
                 <div>
-                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Устройство (Device)</label>
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Устройство
+                        (Device)</label>
                     <select name="embedding_device" class="form-control">
                         <option value="cpu" selected>CPU</option>
                         <option value="cuda">CUDA (Nvidia GPU)</option>
@@ -177,7 +205,8 @@
 
                 <!-- Engine -->
                 <div>
-                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Поисковый движок</label>
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Поисковый
+                        движок</label>
                     <select name="engine" class="form-control">
                         <option value="qdrant" selected>Qdrant (Vector DB)</option>
                         <option value="lancedb">LanceDB (Embedded)</option>
@@ -208,7 +237,7 @@
         </form>
     </div>
 
-    <!-- Dir Picker Modal -->
+    <!--Dir Picker Modal-->
     <div id="dir-picker"
         style="display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
         <div class="card"
@@ -223,7 +252,8 @@
                     style="border: 1px solid var(--border-color);">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                         stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z">
+                        </path>
                         <line x1="12" y1="11" x2="12" y2="17"></line>
                         <line x1="9" y1="14" x2="15" y2="14"></line>
                     </svg>
@@ -276,7 +306,8 @@
                                     {{ ctx.config.title }}
                                 </a>
                             </div>
-                            <div style="font-size: 0.85rem; color: var(--text-muted);">{{ ctx.config.name }}</div>
+                            <div style="font-size: 0.85rem; color: var(--text-muted);">{{ ctx.config.name }}
+                            </div>
                         </td>
                         <td>
                             <div style="font-size: 0.85rem; color: var(--text-muted); font-family: monospace;">
@@ -296,7 +327,8 @@
                                     style="font-size: 0.75rem; color: #dc2626; margin-top: 0.25rem; white-space: pre-wrap; font-family: monospace;">
                                     {{ ctx.error }}</div>
                                 {% elif ctx.status.running %}
-                                <span class="status-dot running"></span> Индексация ({{ ctx.status.files_processed }} /
+                                <span class="status-dot running"></span> Индексация ({{
+                                ctx.status.files_processed }} /
                                 {{
                                 ctx.status.total_files }})
                                 {% else %}
@@ -525,9 +557,9 @@
                     }
 
                     item.innerHTML = `
-                    ${icon}
-                    <span>${d.name}</span>
-                `;
+                        ${icon}
+                        <span>${d.name}</span>
+                        `;
 
                     item.onclick = () => loadDir(d.path);
                     item.onmouseover = () => item.style.backgroundColor = '#f8f9fa';

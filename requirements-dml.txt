@@ -1,3 +1,5 @@
 -r requirements.base.txt
 transformers
 onnxruntime-directml
+onnxscript
+optimum

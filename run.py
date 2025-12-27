@@ -25,9 +25,17 @@ def main():
 
     # Запуск приложения
     print("--- [START] Запуск BSL MCP ---")
+    
+    # Отключаем телеметрию Qdrant (убирает задержку 25с при старте)
+    import os
+    os.environ["QDRANT_TELEMETRY_DISABLED"] = "1"
+
     try:
         cmd = [str(venv_python), "-m", "code_search"] + sys.argv[1:]
-        subprocess.run(cmd)
+        # Явно передаем environment с установленной переменной
+        env = os.environ.copy()
+        env["QDRANT_TELEMETRY_DISABLED"] = "1"
+        subprocess.run(cmd, env=env)
     except KeyboardInterrupt:
         print("\nОстановлено пользователем.")
     except Exception as e:

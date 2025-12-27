@@ -7,8 +7,7 @@ from queue import Queue
 from typing import Optional
 
 from .config_manager import IBConfig, ConfigManager
-from .indexer.engine import IndexEngine
-from .search.hybrid import HybridSearch
+
 from .config import IndexingStatus
 from .logger import get_logger
 from .utils import check_index_lock
@@ -19,8 +18,8 @@ logger = get_logger("app.context")
 class IBContext:
     """Контекст одной информационной базы."""
     config: IBConfig
-    engine: IndexEngine
-    searcher: HybridSearch
+    engine: 'IndexEngine'
+    searcher: 'HybridSearch'
     status: IndexingStatus = field(default_factory=IndexingStatus)
     error: Optional[str] = None  # Сообщение об ошибке (если есть)
     locking_pid: Optional[int] = None  # PID процесса-блокировщика
@@ -90,19 +89,46 @@ class IBManager:
 
     def __init__(self, config_manager: ConfigManager):
         self.config_manager = config_manager
-        self.contexts: dict[str, IBContext] = {}
-        self.error_contexts: dict[str, ErrorIBContext] = {}  # ИБ в состоянии ошибки
+        self.contexts: Dict[str, IBContext] = {}
+        self.error_contexts: Dict[str, ErrorIBContext] = {} # IBs that failed to load
         self.is_initializing: bool = False
-        self._init_thread: threading.Thread | None = None
+        self.current_init_ib: Optional[str] = None # Name of the IB currently being initialized
+        self.current_init_stage: str = "" # Detaled initialization stage
+        self._init_thread: threading.Thread | None = None # Kept for compatibility with existing async_init if not fully replaced
 
     def initialize(self):
-        """Синхронная инициализация всех ИБ из конфига."""
+        """Синхронная инициализация всех ИБ из конфига (запускается в потоке)."""
         self.is_initializing = True
+        self.current_init_ib = None
+        self.current_init_stage = ""
+        self.contexts.clear()
+        self.error_contexts.clear()
+        
         try:
+            # Сначала проверяем, есть ли конфигурации
+            if not self.config_manager.config.ibs:
+                logger.info("Нет конфигураций для инициализации")
+                return
+
+            logger.info(f"Запуск инициализации {len(self.config_manager.config.ibs)} ИБ...")
+            start_total = time.time()
             for ib_conf in self.config_manager.config.ibs:
+                self.current_init_ib = ib_conf.name
+                self._set_init_stage("Начало загрузки")
+                
+                logger.info(f"--- Начало инициализации ИБ: {ib_conf.name} ---")
+                start_ib = time.time()
                 self._init_ib(ib_conf)
+                duration_ib = time.time() - start_ib
+                logger.info(f"--- Завершено ИБ {ib_conf.name}: {duration_ib:.2f} сек ---")
+                
+            total_duration = time.time() - start_total
+            logger.info(f"Инициализация всех ИБ завершена за {total_duration:.2f} сек")
         finally:
+            self.current_init_ib = None
+            self.current_init_stage = ""
             self.is_initializing = False
+            logger.info("Инициализация завершена")
 
     def initialize_async(self):
         """Асинхронная инициализация в фоновом потоке."""
@@ -111,9 +137,16 @@ class IBManager:
         self._init_thread = threading.Thread(target=self.initialize, daemon=True)
         self._init_thread.start()
 
+    def _set_init_stage(self, stage: str):
+        """Установить текущий этап инициализации и записать в лог."""
+        self.current_init_stage = stage
+        if self.current_init_ib:
+            logger.info(f"[{self.current_init_ib}] Этап: {stage}")
+
     def _init_ib(self, ib_conf: IBConfig):
         """Инициализация одной ИБ."""
         # Сначала проверяем блокировку папки индекса
+        self._set_init_stage("Проверка блокировок (FS Lock)")
         is_locked, pid, lock_message = check_index_lock(ib_conf.index_dir)
         if is_locked:
             logger.error(f"ИБ {ib_conf.name}: папка индекса заблокирована! {lock_message}")
@@ -126,6 +159,11 @@ class IBManager:
         
         try:
             logger.info(f"Инициализация ИБ: {ib_conf.name}...")
+            
+            self._set_init_stage("Инициализация IndexEngine (Загрузка индекса...)")
+            from .indexer.engine import IndexEngine
+            from .search.hybrid import HybridSearch
+            
             engine = IndexEngine(
                 source_dir=ib_conf.source_dir,
                 index_dir=ib_conf.index_dir,
@@ -134,6 +172,8 @@ class IBManager:
                 embedding_device=ib_conf.embedding_device,
                 vector_db_type=ib_conf.vector_db
             )
+            
+            self._set_init_stage("Инициализация HybridSearch (подготовка поиска)")
             # Searcher будет инициализирован с engine.db
             searcher = HybridSearch(engine.db, collection_name=f"code_{ib_conf.name}", model_name=ib_conf.embedding_model, embedding_device=ib_conf.embedding_device)
             
@@ -141,7 +181,10 @@ class IBManager:
             self.contexts[ib_conf.name] = ctx
             
             # Запуск обслуживания
+            self._set_init_stage("Запуск фонового обслуживания")
             ctx.start_maintenance()
+            
+            self._set_init_stage("Готово")
             logger.info(f"ИБ {ib_conf.name} инициализирована")
         except Exception as e:
             error_msg = str(e)
@@ -203,3 +246,15 @@ class IBManager:
     def get_working_contexts(self) -> list[IBContext]:
         """Только рабочие контексты (без ошибок)."""
         return list(self.contexts.values())
+
+    def shutdown(self):
+        """Корректное завершение работы."""
+        logger.info("Остановка IBManager...")
+        self.is_initializing = False
+        
+        for name in list(self.contexts.keys()):
+            try:
+                self.remove_ib(name, remove_config=False)
+            except Exception as e:
+                logger.error(f"Ошибка при остановке {name}: {e}")
+        logger.info("IBManager остановлен")

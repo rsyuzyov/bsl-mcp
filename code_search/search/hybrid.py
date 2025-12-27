@@ -1,15 +1,12 @@
 """Гибридный поиск."""
 import re
 import threading
-import pymorphy3
-
-from ..model_manager import ModelManager
-from ..vector_db import VectorDB
-
-
 # Синглтон для MorphAnalyzer (инициализация ~20 сек, делаем один раз)
 _morph_instance = None
 _morph_lock = threading.Lock()
+
+from ..model_manager import ModelManager
+from ..vector_db import VectorDB
 
 def get_morph_analyzer():
     """Получить единственный экземпляр MorphAnalyzer."""
@@ -17,7 +14,12 @@ def get_morph_analyzer():
     if _morph_instance is None:
         with _morph_lock:
             if _morph_instance is None:
+                import time
+                import pymorphy3
+                print("Инициализация pymorphy3.MorphAnalyzer()...")
+                start = time.time()
                 _morph_instance = pymorphy3.MorphAnalyzer()
+                print(f"pymorphy3 загружен за {time.time() - start:.2f} сек")
     return _morph_instance
 
 

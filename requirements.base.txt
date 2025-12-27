@@ -1,12 +1,11 @@
 qdrant-client
 sentence-transformers
-fastapi
 uvicorn
+fastapi
 pymorphy3
 tqdm
 PyYAML
 python-multipart
 jinja2
 lancedb
-chromadb
 mcp

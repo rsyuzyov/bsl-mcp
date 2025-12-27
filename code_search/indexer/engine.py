@@ -40,8 +40,18 @@ class IndexEngine:
         
         self.logger = get_logger(f"idx.{collection_name}")
         
+        t0 = time.time()
+        self.logger.info(f"Подключение к vector_db ({vector_db_type})...")
         self.db = get_vector_db(self.vector_db_type, str(self.index_dir))
+        dt = time.time() - t0
+        self.logger.info(f"Подключено к БД за {dt:.2f} сек")
+        if dt > 5.0:
+             self.logger.warning("Долгое подключение к БД! Возможно, проблема с сетью или телеметрией Qdrant.")
+        
+        t1 = time.time()
         self._ensure_collection()
+        self.logger.info(f"Коллекция проверена за {time.time() - t1:.2f} сек")
+        
         self.model_manager = ModelManager()
         self.batch_counter = 0
 
@@ -289,9 +299,20 @@ class IndexEngine:
             # Here we do full check: read all files, calculate hash, compare with old hash.
             # This is "heavy" incremental check.
             
-            # For progress reporting on discovery phase:
-            status.status_detail = "Scanning files..."
-            self.logger.info(f"[Incremental] Scanning {len(files)} files for changes...")
+            # Для progress reporting on discovery phase:
+            status.status_detail = "Проверка модели..."
+            
+            # Предзагрузка модели, чтобы отобразить статус в вебе
+            self.logger.info("[Incremental] Проверка модели эмбеддингов...")
+            model_info = self.model_manager.get_model(self.embedding_model_name, self.embedding_device)
+            if model_info.loading:
+                 status.status_detail = "Загрузка нейросети (ML)..."
+                 wait_start = time.time()
+                 while model_info.loading and time.time() - wait_start < 120:
+                     time.sleep(1)
+            
+            status.status_detail = "Сканирование файлов..."
+            self.logger.info(f"[Incremental] Сканирование {len(files)} файлов для изменений...")
 
             current_files_set = set()
             processed_scan = 0

@@ -5,6 +5,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+from .logger import get_logger
+
+logger = get_logger("app.models")
+
 @dataclass
 class ModelInfo:
     """Информация о загруженной модели."""
@@ -16,7 +20,7 @@ class ModelInfo:
 
 
 # Папка для кэширования ONNX моделей
-ONNX_CACHE_DIR = Path(__file__).parent.parent / ".onnx_cache"
+ONNX_CACHE_DIR = Path(__file__).parent.parent / ".onnx_cache_new"
 
 
 class ModelManager:
@@ -44,10 +48,12 @@ class ModelManager:
 
     def _load_model_worker(self, model_name: str, device: str):
         """Фоновая загрузка модели."""
+        import time
+        start_time = time.time()
         cache_key = (model_name, device)
         info = self.models[cache_key]
         try:
-            print(f"Загрузка модели {model_name} на {device}...")
+            logger.info(f"Начало загрузки модели {model_name} на {device}...")
             
             # Сначала пробуем sentence-transformers (проще и надёжнее)
             try:
@@ -65,15 +71,15 @@ class ModelManager:
                     if model is not None:
                         info.model = model
                         info.loading = False
-                        print(f"Модель {model_name} загружена (ONNX)")
+                        logger.info(f"Модель {model_name} загружена (ONNX)")
                         return
                     # Fallback на CPU
                     model = SentenceTransformer(model_name, device="cpu")
-                    print(f"DirectML недоступен, используется CPU")
+                    logger.warning(f"DirectML недоступен, используется CPU")
                 
                 info.model = model
                 info.loading = False
-                print(f"Модель {model_name} загружена")
+                logger.info(f"Модель {model_name} загружена за {time.time() - start_time:.2f} сек")
                 
             except ImportError:
                 # Если sentence-transformers нет, используем ONNX напрямую
@@ -82,12 +88,12 @@ class ModelManager:
                     raise RuntimeError("Не удалось загрузить модель")
                 info.model = model
                 info.loading = False
-                print(f"Модель {model_name} загружена (ONNX)")
+                logger.info(f"Модель {model_name} загружена (ONNX) за {time.time() - start_time:.2f} сек")
 
         except Exception as e:
             info.error = str(e)
             info.loading = False
-            print(f"Ошибка загрузки модели {model_name}: {e}")
+            logger.error(f"Ошибка загрузки модели {model_name}: {e}", exc_info=True)
 
     def _load_onnx_model(self, model_name: str, device: str):
         """Загрузка модели через ONNX Runtime напрямую."""
@@ -111,7 +117,7 @@ class ModelManager:
             if not providers:
                 providers = ["CPUExecutionProvider"]
             
-            print(f"ONNX провайдеры: {providers}")
+            logger.info(f"ONNX провайдеры: {providers}")
             
             # Получаем путь к ONNX модели
             onnx_path = self._get_onnx_model_path(model_name)
@@ -119,7 +125,13 @@ class ModelManager:
                 return None
             
             # Создаём сессию
-            session = ort.InferenceSession(str(onnx_path), providers=providers)
+            sess_options = ort.SessionOptions()
+            # Отключаем оптимизацию памяти, которая вызывает ошибку Shape mismatch на DirectML
+            sess_options.enable_mem_pattern = False
+            sess_options.enable_cpu_mem_arena = False
+            sess_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+            
+            session = ort.InferenceSession(str(onnx_path), providers=providers, sess_options=sess_options)
             tokenizer = AutoTokenizer.from_pretrained(model_name)
             
             class ONNXWrapper:
@@ -131,23 +143,41 @@ class ModelManager:
                     all_embeddings = []
                     for i in range(0, len(sentences), batch_size):
                         batch = sentences[i : i + batch_size]
+                        
+                        # Pad batch to fixed size to avoid ONNX Runtime buffer reuse shape mismatches
+                        original_len = len(batch)
+                        if original_len < batch_size and batch_size > 0:
+                            batch = batch + [batch[-1]] * (batch_size - original_len)
+                        
                         encoded = self.tokenizer(
                             batch, 
-                            padding=True, 
+                            padding='max_length', 
                             truncation=True, 
                             max_length=512, 
                             return_tensors='np'
                         )
+                        
+                        # Получаем список ожидаемых входных параметров модели
+                        input_names = [i.name for i in self.session.get_inputs()]
                         
                         inputs = {
                             'input_ids': encoded['input_ids'].astype(np.int64),
                             'attention_mask': encoded['attention_mask'].astype(np.int64),
                         }
                         if 'token_type_ids' in encoded:
-                            inputs['token_type_ids'] = encoded['token_type_ids'].astype(np.int64)
+                             inputs['token_type_ids'] = encoded['token_type_ids'].astype(np.int64)
                         
-                        outputs = self.session.run(None, inputs)
+                        # Фильтруем inputs, оставляя только то, что ждет модель
+                        final_inputs = {k: v for k, v in inputs.items() if k in input_names}
+                        
+                        outputs = self.session.run(None, final_inputs)
                         token_embeddings = outputs[0]  # [batch, seq_len, hidden]
+                        
+                        # Slice back to original size if padded
+                        if original_len < batch_size:
+                            token_embeddings = token_embeddings[:original_len]
+                            encoded['attention_mask'] = encoded['attention_mask'][:original_len]
+
                         attention_mask = encoded['attention_mask']
                         
                         # Mean pooling
@@ -169,7 +199,7 @@ class ModelManager:
             return ONNXWrapper(session, tokenizer)
             
         except Exception as e:
-            print(f"Ошибка загрузки ONNX: {e}")
+            logger.error(f"Ошибка загрузки ONNX: {e}", exc_info=True)
             return None
 
     def _get_onnx_model_path(self, model_name: str) -> Path | None:
@@ -186,7 +216,7 @@ class ModelManager:
         
         # Экспортируем модель в ONNX
         try:
-            print(f"Экспорт модели {model_name} в ONNX...")
+            logger.info(f"Экспорт модели {model_name} в ONNX...")
             from transformers import AutoModel, AutoTokenizer
             import torch
             
@@ -197,8 +227,8 @@ class ModelManager:
             
             model.eval()
             
-            # Dummy input
-            dummy = tokenizer("test", return_tensors="pt")
+            # Dummy input with representative shape (batch 64, seq 512) to help shape inference
+            dummy = tokenizer(["test"]*64, padding="max_length", max_length=512, truncation=True, return_tensors="pt")
             
             # Export
             torch.onnx.export(
@@ -212,12 +242,12 @@ class ModelManager:
                     'attention_mask': {0: 'batch', 1: 'sequence'},
                     'last_hidden_state': {0: 'batch', 1: 'sequence'}
                 },
-                opset_version=14
+                opset_version=17
             )
             
-            print(f"Модель экспортирована в {onnx_path}")
+            logger.info(f"Модель экспортирована в {onnx_path}")
             return onnx_path
             
         except Exception as e:
-            print(f"Ошибка экспорта в ONNX: {e}")
+            logger.error(f"Ошибка экспорта в ONNX: {e}")
             return None

@@ -9,7 +9,18 @@ class QdrantAdapter(VectorDB):
     def __init__(self, path: str):
         self.path = Path(path) / "qdrant"
         self.path.mkdir(parents=True, exist_ok=True)
-        self.client = QdrantClient(path=str(self.path))
+        import os
+        from ..logger import get_logger
+        log = get_logger("idx.qdrant")
+        telemetry = os.environ.get("QDRANT_TELEMETRY_DISABLED", "NOT_SET")
+        log.info(f"Инициализация QdrantClient (telemetry={telemetry})...")
+        try:
+             # timeout=5.0 ограничивает время попыток подключения (если оно происходит)
+             # check_compatibility=False отключает лишние проверки версий
+             self.client = QdrantClient(path=str(self.path), timeout=5.0, check_compatibility=False)
+        except TypeError:
+             # Если версия старая и не поддерживает аргументы
+             self.client = QdrantClient(path=str(self.path))
 
     def create_collection(self, name: str, vector_size: int):
         collections = [c.name for c in self.client.get_collections().collections]

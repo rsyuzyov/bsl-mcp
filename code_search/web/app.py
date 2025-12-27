@@ -39,6 +39,23 @@ def create_app(ib_manager: IBManager) -> FastAPI:
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
     templates = Jinja2Templates(directory=str(template_dir))
 
+    @app.on_event("startup")
+    async def startup_event():
+        """Запуск инициализации после старта сервера."""
+        import threading
+        # Запускаем с небольшой задержкой, чтобы сервер успел отдать первые запросы
+        def delayed_start():
+            import time
+            time.sleep(1.0) 
+            ib_manager.initialize_async()
+        
+        threading.Thread(target=delayed_start, daemon=True).start()
+
+    @app.on_event("shutdown")
+    def shutdown_event():
+        """Очистка ресурсов."""
+        ib_manager.shutdown()
+
     @app.get("/favicon.ico")
     async def favicon():
         from fastapi.responses import FileResponse
@@ -82,12 +99,14 @@ def create_app(ib_manager: IBManager) -> FastAPI:
             })
         
         # Определяем текущий этап
-        if ib_manager.is_initializing:
-            stage = "ib_init"
-            stage_text = "Инициализация баз..."
-        elif any(m["loading"] for m in models_status):
+        any_model_loading = any(m["loading"] for m in models_status)
+        
+        if any_model_loading:
             stage = "model_loading"
             stage_text = "Загрузка модели эмбеддинга..."
+        elif ib_manager.is_initializing:
+            stage = "ib_init"
+            stage_text = "Инициализация баз..."
         else:
             stage = "ready"
             stage_text = "Готово"
@@ -99,7 +118,9 @@ def create_app(ib_manager: IBManager) -> FastAPI:
             "config_count": len(ib_manager.config_manager.config.ibs),
             "stage": stage,
             "stage_text": stage_text,
-            "models": models_status
+            "models": models_status,
+            "current_init_ib": ib_manager.current_init_ib,
+            "current_init_stage": ib_manager.current_init_stage
         }
     
     @app.get("/search", response_class=HTMLResponse)

@@ -307,6 +307,9 @@
                     statusText.innerText = `Индексация: ${status.pct}% (${status.files_indexed}/${status.files_to_index})`;
                     pBar.style.display = 'block';
                     pFill.style.width = status.pct + '%';
+                } else if (status.initial_check_pending) {
+                    statusText.innerText = 'Проверка изменений...';
+                    pBar.style.display = 'none';
                 } else {
                     statusText.innerText = status.error ? `Ошибка: ${status.error}` : 'Готов';
                     pBar.style.display = 'none';

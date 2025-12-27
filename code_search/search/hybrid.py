@@ -51,8 +51,30 @@ class HybridSearch:
         query_lower = query.lower()
         query_normalized = self.normalize(query)
         
-        # We need model to be loaded
-        query_embedding = model_info.model.encode(["query: " + query]).tolist()[0]
+        # Encode with DirectML fallback to CPU on crash
+        try:
+            query_embedding = model_info.model.encode(["query: " + query]).tolist()[0]
+        except Exception as e:
+            err_str = str(e)
+            if "DirectML Native Crash" in err_str or "0xce" in err_str or "0xcf" in err_str or "utf-8" in err_str:
+                # Fallback to CPU model
+                from ..logger import get_logger
+                logger = get_logger("app.search")
+                logger.warning(f"DirectML crash during search, falling back to CPU model")
+                cpu_model_info = self.model_manager.get_model(self.model_name, "cpu")
+                # Wait for CPU model to load if needed
+                import time
+                for _ in range(60):  # max 30 sec wait
+                    if not cpu_model_info.loading:
+                        break
+                    time.sleep(0.5)
+                if cpu_model_info.error:
+                    return [{"file": "", "text": f"❌ Ошибка: {cpu_model_info.error}", "score": 0, "match": "error"}]
+                if cpu_model_info.loading:
+                    return [{"file": "", "text": "⏳ CPU модель загружается, подождите...", "score": 0, "match": "loading"}]
+                query_embedding = cpu_model_info.model.encode(["query: " + query]).tolist()[0]
+            else:
+                return [{"file": "", "text": f"❌ Ошибка эмбеддинга: {e}", "score": 0, "match": "error"}]
         
         try:
             search_results = self.db.search(

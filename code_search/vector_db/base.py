@@ -44,3 +44,11 @@ class VectorDB(ABC):
     def count(self, collection_name: str) -> int:
         """Количество точек в коллекции."""
         pass
+
+    def optimize(self, collection_name: str):
+        """Оптимизация коллекции (очистка WAL, сжатие). По умолчанию ничего не делает."""
+        pass
+
+    def close(self):
+        """Закрыть соединение."""
+        pass

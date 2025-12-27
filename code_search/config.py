@@ -28,6 +28,7 @@ class IndexingStatus:
     eta_time: float | None = None
     error: str | None = None
     last_file: str = ""
+    initial_check_pending: bool = True
     status_detail: str = ""
 
     def reset(self, mode: str):
@@ -48,10 +49,12 @@ class IndexingStatus:
         self.error = None
         self.last_file = ""
         self.status_detail = ""
+        self.initial_check_pending = False  # Если началась индексация, проверка уже прошла
 
     def to_dict(self) -> dict:
         return {
             "running": self.running,
+            "initial_check_pending": self.initial_check_pending,
             "mode": self.mode,
             "started_at": self.started_at,
             "files_to_index": self.files_to_index,
@@ -93,6 +96,7 @@ class IndexingStatus:
             "mode": self.mode,
             "running": self.running,
             "error": self.error,
+            "initial_check_pending": self.initial_check_pending,
         }
 
     def format_console(self, collection_count: int = 0) -> str:

@@ -33,6 +33,14 @@ class IBContext:
         """Контекст в состоянии ошибки?"""
         return self.error is not None
 
+    @property
+    def model_error(self) -> Optional[str]:
+        """Ошибка загрузки модели (если есть)."""
+        from .model_manager import ModelManager
+        model_mgr = ModelManager()
+        model_info = model_mgr.get_model(self.config.embedding_model, self.config.embedding_device)
+        return model_info.error
+
     def start_maintenance(self):
         """Запуск фонового обслуживания (индексации)."""
         if self.worker_thread and self.worker_thread.is_alive():
@@ -46,7 +54,10 @@ class IBContext:
         """Остановка фонового обслуживания."""
         self.stop_event.set()
         if self.worker_thread:
-            self.worker_thread.join(timeout=1.0)
+            # Ждём до 5 секунд — индексация может быть в процессе flush
+            self.worker_thread.join(timeout=5.0)
+            if self.worker_thread.is_alive():
+                logger.warning(f"Поток обслуживания {self.config.name} не остановился за 5 сек")
 
     def _maintenance_loop(self):
         """Цикл проверки изменений."""
@@ -56,9 +67,13 @@ class IBContext:
                 try:
                     # Проверка изменений
                     has_changes, added, changed, deleted = self.engine.quick_check_changes()
+                    
+                    # Проверка выполнена
+                    self.status.initial_check_pending = False
+
                     if has_changes:
                         log.info(f"Обнаружены изменения, запуск индексации...")
-                        self.engine.incremental_reindex(self.status)
+                        self.engine.incremental_reindex(self.status, stop_event=self.stop_event)
                 except Exception as e:
                     log.error(f"Ошибка в цикле обслуживания: {e}", exc_info=True)
             
@@ -77,6 +92,11 @@ class ErrorIBContext:
     @property
     def is_error(self) -> bool:
         return True
+    
+    @property
+    def model_error(self) -> Optional[str]:
+        """Для ErrorIBContext всегда None (ошибка уже в error)."""
+        return None
     
     @property
     def status(self) -> IndexingStatus:
@@ -143,6 +163,36 @@ class IBManager:
         if self.current_init_ib:
             logger.info(f"[{self.current_init_ib}] Этап: {stage}")
 
+    def _log_ib_status(self, ctx: IBContext):
+        """Логирование детального статуса ИБ после инициализации."""
+        from .model_manager import ModelManager
+        
+        ib_name = ctx.config.name
+        model_name = ctx.config.embedding_model
+        device = ctx.config.embedding_device
+        
+        # Проверяем статус модели
+        model_mgr = ModelManager()
+        model_info = model_mgr.get_model(model_name, device)
+        
+        if model_info.error:
+            model_status = f"ОШИБКА: {model_info.error}"
+        elif model_info.loading:
+            model_status = "загружается..."
+        else:
+            model_status = "OK"
+        
+        # Количество документов в индексе
+        try:
+            doc_count = ctx.engine.get_collection_count()
+        except Exception:
+            doc_count = "?"
+        
+        logger.info(
+            f"[{ib_name}] Статус: модель={model_status}, "
+            f"устройство={device.upper()}, документов={doc_count}"
+        )
+
     def _init_ib(self, ib_conf: IBConfig):
         """Инициализация одной ИБ."""
         # Сначала проверяем блокировку папки индекса
@@ -170,7 +220,8 @@ class IBManager:
                 collection_name=f"code_{ib_conf.name}",
                 embedding_model_name=ib_conf.embedding_model,
                 embedding_device=ib_conf.embedding_device,
-                vector_db_type=ib_conf.vector_db
+                vector_db_type=ib_conf.vector_db,
+                scan_workers=self.config_manager.config.scan_workers
             )
             
             self._set_init_stage("Инициализация HybridSearch (подготовка поиска)")
@@ -183,6 +234,9 @@ class IBManager:
             # Запуск обслуживания
             self._set_init_stage("Запуск фонового обслуживания")
             ctx.start_maintenance()
+            
+            # Логируем детальный статус после инициализации
+            self._log_ib_status(ctx)
             
             self._set_init_stage("Готово")
             logger.info(f"ИБ {ib_conf.name} инициализирована")

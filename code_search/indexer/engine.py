@@ -18,14 +18,13 @@ from ..logger import get_logger
 
 # Настройки производительности
 BATCH_SIZE = 500  # Возвращаем нормальный размер батча
-READ_WORKERS = 1  # 1 поток чтения, чтобы отдать CPU под ONNX
 EMBED_BATCH_SIZE = 64
 
 
 class IndexEngine:
     """Движок индексации 1С выгрузки для конкретной ИБ."""
 
-    def __init__(self, source_dir: str, index_dir: str, collection_name: str, embedding_model_name: str, embedding_device: str = "cpu", vector_db_type: str = "qdrant", vector_size: int = VECTOR_SIZE):
+    def __init__(self, source_dir: str, index_dir: str, collection_name: str, embedding_model_name: str, embedding_device: str = "cpu", vector_db_type: str = "qdrant", vector_size: int = VECTOR_SIZE, scan_workers: int = 4):
         self.source_dir = Path(source_dir)
         self.index_dir = Path(index_dir)
         self.collection_name = collection_name
@@ -33,6 +32,7 @@ class IndexEngine:
         self.embedding_device = embedding_device
         self.vector_db_type = vector_db_type
         self.vector_size = vector_size
+        self.scan_workers = scan_workers
         
         self.meta_file = self.index_dir / "file_hashes.json"
         
@@ -50,6 +50,9 @@ class IndexEngine:
         
         t1 = time.time()
         self._ensure_collection()
+        
+        # Оптимизация WAL при старте для ускорения загрузки
+        self.db.optimize(self.collection_name)
         self.logger.info(f"Коллекция проверена за {time.time() - t1:.2f} сек")
         
         self.model_manager = ModelManager()
@@ -91,47 +94,50 @@ class IndexEngine:
              raise RuntimeError(f"Ошибка модели: {model_info.error}")
 
         prefixed = ["passage: " + t for t in texts]
-        embeddings = model_info.model.encode(
-            prefixed, 
-            show_progress_bar=False,
-            batch_size=EMBED_BATCH_SIZE
-        )
+        try:
+            embeddings = model_info.model.encode(
+                prefixed, 
+                show_progress_bar=False,
+                batch_size=EMBED_BATCH_SIZE
+            )
+        except RuntimeError as e:
+            if "DirectML Native Crash" in str(e) and self.embedding_device != "cpu":
+                self.logger.error("DirectML failed with native crash. Switching to CPU and retrying...")
+                self.embedding_device = "cpu"
+                return self.embed_texts(texts)
+            raise e
         return embeddings.tolist()
 
     def quick_check_changes(self) -> tuple[bool, int, int, int]:
         """Быстрая проверка изменений по mtime+size."""
         old_hashes = load_hashes(self.meta_file)
-        # If no hashes, and no files in DB -> no changes (technically empty), but usually means full reindex needed.
-        # If DB has data but no hashes -> inconsistency, treat as changes needed.
-        # For simplicity, if no hashes, we say NO changes (unless we want to trigger initial index elsewhere).
-        # But wait, helper 'startup_indexing' logic relied on this.
-        # Let's say: if old_hashes is empty, check if we have files.
         
         files = self.get_all_files()
         if not files and not old_hashes:
              return False, 0, 0, 0
              
-        current_files = {}
+        current_files = set()
         added, changed = 0, 0
         
         for file_path in files:
             try:
                 rel_path = str(file_path.relative_to(self.source_dir))
-                stat = file_path.stat()
-                quick_key = f"{stat.st_mtime_ns}:{stat.st_size}"
-                current_files[rel_path] = quick_key
+                current_files.add(rel_path)
                 
                 if rel_path not in old_hashes:
                     added += 1
-                elif not old_hashes[rel_path].startswith(quick_key.split(":")[0][:10]):
-                    # Check comments in original file about logic issues.
-                    pass
+                else:
+                    info = old_hashes[rel_path]
+                    stat = file_path.stat()
+                    # Check if mtime/size matches
+                    if info.get("mtime") != stat.st_mtime_ns or info.get("size") != stat.st_size:
+                         changed += 1
             except Exception:
                 continue
                 
-        deleted = len(set(old_hashes.keys()) - set(current_files.keys()))
+        deleted = len(set(old_hashes.keys()) - current_files)
         
-        return (added > 0 or deleted > 0), added, 0, deleted
+        return (added > 0 or deleted > 0 or changed > 0), added, changed, deleted
 
 
     def _print_progress(self, status: IndexingStatus):
@@ -153,7 +159,7 @@ class IndexEngine:
             self.logger.error(f"Ошибка чтения {file_path}: {e}")
             return None
 
-    def full_reindex(self, status: IndexingStatus = None) -> dict:
+    def full_reindex(self, status: IndexingStatus = None, stop_event: threading.Event = None) -> dict:
         """Полная переиндексация с параллельным чтением."""
         if status is None:
             status = IndexingStatus()
@@ -163,10 +169,43 @@ class IndexEngine:
         self.logger.info(f"Запуск полной переиндексации...")
         
         try:
-            self.db.delete_collection(self.collection_name)
-            self.db.create_collection(self.collection_name, self.vector_size)
+            # Удаляем хэши СРАЗУ, чтобы при ошибке они не остались
+            if self.meta_file.exists():
+                self.meta_file.unlink()
+                self.logger.info("Хэши удалены")
             
+            # Удаляем коллекцию
+            t_del = time.time()
+            self.logger.info("Удаление коллекции...")
+            self.db.delete_collection(self.collection_name)
+            self.logger.info(f"Коллекция удалена за {time.time() - t_del:.2f} сек")
+            
+            # Для Qdrant embedded: очищаем папку данных для удаления мусора
+            qdrant_storage = self.index_dir / "qdrant"
+            if qdrant_storage.exists():
+                import shutil
+                # Закрываем соединение перед очисткой
+                t_clean = time.time()
+                self.logger.info("Очистка папки Qdrant...")
+                self.db.close()
+                shutil.rmtree(qdrant_storage, ignore_errors=True)
+                self.logger.info(f"Папка Qdrant очищена за {time.time() - t_clean:.2f} сек")
+                # Переподключаемся
+                t_reconnect = time.time()
+                self.logger.info("Переподключение к Qdrant...")
+                from ..vector_db import get_vector_db
+                self.db = get_vector_db(self.vector_db_type, str(self.index_dir))
+                self.logger.info(f"Переподключено за {time.time() - t_reconnect:.2f} сек")
+            
+            t_create = time.time()
+            self.logger.info("Создание коллекции...")
+            self.db.create_collection(self.collection_name, self.vector_size)
+            self.logger.info(f"Коллекция создана за {time.time() - t_create:.2f} сек")
+            
+            t_scan = time.time()
+            self.logger.info("Сканирование файлов...")
             files = self.get_all_files()
+            self.logger.info(f"Найдено {len(files)} файлов за {time.time() - t_scan:.2f} сек")
             status.files_to_index = len(files)
             status.chunks_in_db_start = 0 
             
@@ -228,10 +267,15 @@ class IndexEngine:
                 
                 self.logger.info(f"Batch {len(texts)}: Full={total_time:.2f}s | Embed={embed_time:.2f}s ({per_item:.1f}ms/item) | Upsert={upsert_time:.2f}s")
 
-            with ThreadPoolExecutor(max_workers=READ_WORKERS) as executor:
+            with ThreadPoolExecutor(max_workers=self.scan_workers) as executor:
                 futures = {executor.submit(self._read_file, f): f for f in files}
                 
                 for future in as_completed(futures):
+                    if stop_event and stop_event.is_set():
+                        for f in futures:
+                             f.cancel()
+                        break
+                    
                     result = future.result()
                     if result is None:
                         files_processed += 1
@@ -267,6 +311,11 @@ class IndexEngine:
             progress_stop.set()
             
             save_hashes(self.meta_file, hashes)
+            
+            # Оптимизация после индексации
+            self.logger.info("Запуск оптимизации (сжатие сегментов, очистка WAL)...")
+            self.db.optimize(self.collection_name)
+            
             elapsed_total = time.time() - start_time
             self.logger.info(f"[Full Index] Done in {format_duration(elapsed_total)}")
             status.running = False
@@ -279,7 +328,7 @@ class IndexEngine:
             raise
 
 
-    def incremental_reindex(self, status: IndexingStatus = None) -> dict:
+    def incremental_reindex(self, status: IndexingStatus = None, stop_event: threading.Event = None) -> dict:
         """Инкрементальная индексация с батчингом."""
         if status is None:
             status = IndexingStatus()
@@ -318,15 +367,26 @@ class IndexEngine:
             processed_scan = 0
             
             # Use threading for faster IO/Hashing
-            with ThreadPoolExecutor(max_workers=READ_WORKERS) as executor:
+            with ThreadPoolExecutor(max_workers=self.scan_workers) as executor:
                 # Helper to process one file
                 def process_file_hash(f_path):
                     try:
                         r_path = str(f_path.relative_to(self.source_dir))
+                        stat = f_path.stat()
+                        mtime = stat.st_mtime_ns
+                        size = stat.st_size
+                        
+                        # Optimization: check mtime+size
+                        if r_path in old_hashes:
+                            old = old_hashes[r_path]
+                            # load_hashes normalizes to dict, safely check
+                            if old.get("mtime") == mtime and old.get("size") == size:
+                                return (f_path, r_path, old["hash"], mtime, size, False)
+
                         # Read bytes for hashing
                         content_bytes = f_path.read_bytes()
                         h = hashlib.md5(content_bytes).hexdigest()
-                        return (f_path, r_path, h)
+                        return (f_path, r_path, h, mtime, size, True)
                     except Exception:
                         return None
 
@@ -336,6 +396,11 @@ class IndexEngine:
                 last_print = time.time()
                 
                 for future in as_completed(futures):
+                    if stop_event and stop_event.is_set():
+                        for f in futures:
+                             f.cancel()
+                        break
+                    
                     res = future.result()
                     processed_scan += 1
                     
@@ -346,15 +411,17 @@ class IndexEngine:
                     if res is None:
                         continue
                         
-                    f_p, r_p, f_h = res
+                    f_p, r_p, f_h, mtime, size, was_read = res
                     current_files_set.add(r_p)
                     
-                    new_hashes[r_p] = f_h
+                    new_hashes[r_p] = {"hash": f_h, "mtime": mtime, "size": size}
                     
                     if r_p not in old_hashes:
                         to_process.append((f_p, r_p, "new"))
-                    elif old_hashes[r_p] != f_h:
-                        to_process.append((f_p, r_p, "changed"))
+                    elif was_read:
+                        # If read, check if hash changed
+                        if old_hashes[r_p]["hash"] != f_h:
+                            to_process.append((f_p, r_p, "changed"))
 
             added = len([x for x in to_process if x[2] == "new"])
             updated = len([x for x in to_process if x[2] == "changed"])
@@ -364,6 +431,11 @@ class IndexEngine:
             
             # Clear line after scanning done
             self.logger.info(f"Scanning done. Found: +{added} ~{updated} -{deleted}")
+            
+            if stop_event and stop_event.is_set():
+                 self.logger.info("Indexing cancelled.")
+                 status.running = False
+                 return {}
             
             if not added and not updated and not deleted:
                 status.running = False
@@ -389,10 +461,16 @@ class IndexEngine:
 
             batch_points = []
             files_in_batch = []
+            indexed_hashes = dict(old_hashes)  # Начинаем с существующих хешей
             
             def flush_batch():
-                nonlocal batch_points, files_in_batch, added, updated
+                nonlocal batch_points, files_in_batch, added, updated, indexed_hashes
                 if not batch_points:
+                    return
+                # Не записываем если получен сигнал остановки
+                if stop_event and stop_event.is_set():
+                    batch_points = []
+                    files_in_batch = []
                     return
                 
                 t0 = time.time()
@@ -438,6 +516,11 @@ class IndexEngine:
                 if self.batch_counter % 3 == 0:
                     self.logger.info(f"Batch {len(texts)}: Full={total_time:.2f}s | Embed={embed_time:.2f}s ({per_item:.1f}ms/item) | Upsert={upsert_time:.2f}s")
                 
+                # Сохраняем хеши успешно проиндексированных файлов
+                for rel_path, st, _ in files_in_batch:
+                    if rel_path in new_hashes:
+                        indexed_hashes[rel_path] = new_hashes[rel_path]
+                
                 batch_points = []
                 files_in_batch = []
                 status.status_detail = "reading..."
@@ -455,6 +538,9 @@ class IndexEngine:
                         continue
                     
                     status.last_file = rel_path
+                    if stop_event and stop_event.is_set():
+                        break
+                        
                     chunks = chunk_text(content)
                     
                     for j, chunk in enumerate(chunks):
@@ -489,8 +575,14 @@ class IndexEngine:
                         self.db.delete_by_file_path(self.collection_name, rel_path)
                     except Exception:
                         pass
+                    # Удаляем хеш удалённого файла
+                    indexed_hashes.pop(rel_path, None)
                 
-                save_hashes(self.meta_file, new_hashes)
+                # Сохраняем только если индексация не была прервана
+                if not (stop_event and stop_event.is_set()):
+                    save_hashes(self.meta_file, indexed_hashes)
+                else:
+                    self.logger.info("Индексация прервана, хеши не сохранены")
                 
             finally:
                 progress_stop.set()
@@ -498,6 +590,12 @@ class IndexEngine:
             
             status.running = False
             elapsed = time.time() - start_time
+            
+            # Оптимизация после индексации (если были изменения)
+            if added or updated or deleted:
+                self.logger.info("Запуск оптимизации (сжатие сегментов, очистка WAL)...")
+                self.db.optimize(self.collection_name)
+            
             self.logger.info(f"Indexing done in {round(elapsed, 1)}s")
             return {"added": added, "updated": updated, "deleted": deleted, "time_sec": round(elapsed, 1)}
 

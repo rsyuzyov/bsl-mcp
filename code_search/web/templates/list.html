@@ -331,6 +331,14 @@
                                 ctx.status.files_processed }} /
                                 {{
                                 ctx.status.total_files }})
+                                {% elif ctx.status.initial_check_pending %}
+                                <span class="status-dot running"></span> Проверка изменений...
+                                {% elif ctx.model_error %}
+                                <span class="status-dot error"></span>
+                                <span style="color: #dc2626;">Ошибка модели</span>
+                                <div
+                                    style="font-size: 0.75rem; color: #dc2626; margin-top: 0.25rem; white-space: pre-wrap; font-family: monospace; max-width: 300px; overflow: hidden; text-overflow: ellipsis;">
+                                    {{ ctx.model_error }}</div>
                                 {% else %}
                                 <span class="status-dot active"></span> Активен
                                 {% endif %}

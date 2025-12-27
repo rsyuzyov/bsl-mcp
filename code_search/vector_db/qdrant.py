@@ -81,6 +81,35 @@ class QdrantAdapter(VectorDB):
         except:
             return 0
 
+    def optimize(self, collection_name: str):
+        """Оптимизация коллекции: сжатие сегментов и очистка WAL."""
+        try:
+            from ..logger import get_logger
+            log = get_logger("idx.qdrant")
+            
+            # Запускаем оптимизацию
+            self.client.update_collection(
+                collection_name=collection_name,
+                optimizer_config={
+                    "indexing_threshold": 0  # Форсирует индексацию
+                }
+            )
+            
+            # Ждём завершения оптимизации
+            import time
+            max_wait = 60
+            start = time.time()
+            while time.time() - start < max_wait:
+                info = self.client.get_collection(collection_name)
+                if info.status.name == "GREEN":
+                    break
+                time.sleep(1)
+            
+            log.info(f"Оптимизация {collection_name} завершена")
+        except Exception as e:
+            from ..logger import get_logger
+            get_logger("idx.qdrant").warning(f"Ошибка оптимизации: {e}")
+
     def close(self):
         if hasattr(self.client, 'close'):
             self.client.close()

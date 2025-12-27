@@ -81,6 +81,12 @@ def setup_logging(log_level_str: str = "INFO"):
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     logging.getLogger("chromadb").setLevel(logging.WARNING)
     logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
+    
+    # Перенаправляем Python warnings в логгер
+    import warnings
+    logging.captureWarnings(True)
+    warnings_logger = logging.getLogger("py.warnings")
+    warnings_logger.setLevel(logging.WARNING)
 
     return logger
 

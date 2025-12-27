@@ -28,6 +28,31 @@ def is_port_in_use(port: int) -> bool:
         return s.connect_ex(("127.0.0.1", port)) == 0
 
 
+def find_process_on_port(port: int) -> tuple[int | None, str | None]:
+    """Найти PID процесса, занявшего порт (Windows)."""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["netstat", "-ano", "-p", "TCP"],
+            capture_output=True, text=True, timeout=5
+        )
+        for line in result.stdout.splitlines():
+            if f":{port}" in line and "LISTENING" in line:
+                parts = line.split()
+                if parts:
+                    pid = int(parts[-1])
+                    # Получаем имя процесса
+                    tasklist = subprocess.run(
+                        ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+                        capture_output=True, text=True, timeout=5
+                    )
+                    proc_name = tasklist.stdout.split(",")[0].strip('"') if tasklist.stdout else "unknown"
+                    return pid, proc_name
+    except Exception:
+        pass
+    return None, None
+
+
 def main():
     # 1. Настройка логирования - ПЕРВЫМ ДЕЛОМ (ротация старого лога)
     logger = setup_logging()  # Сначала с уровнем по умолчанию
@@ -50,7 +75,11 @@ def main():
 
     # 3. Проверка занятости порта ДО тяжёлой инициализации
     if is_port_in_use(config.port):
-        logger.error(f"Порт {config.port} уже занят. Возможно, приложение уже запущено.")
+        pid, proc_name = find_process_on_port(config.port)
+        if pid:
+            logger.error(f"Порт {config.port} занят процессом {proc_name} (PID {pid}). Для завершения: taskkill /PID {pid} /F")
+        else:
+            logger.error(f"Порт {config.port} уже занят. Возможно, приложение уже запущено.")
         sys.exit(1)
 
     # 4. Инициализация менеджера ИБ (фоновая загрузка моделей)

@@ -20,7 +20,7 @@ class ModelInfo:
 
 
 # Папка для кэширования ONNX моделей
-ONNX_CACHE_DIR = Path(__file__).parent.parent / ".onnx_cache_new"
+ONNX_CACHE_DIR = Path(__file__).parent.parent / ".onnx_cache_dml"
 
 
 class ModelManager:
@@ -126,9 +126,8 @@ class ModelManager:
             
             # Создаём сессию
             sess_options = ort.SessionOptions()
-            # Отключаем оптимизацию памяти, которая вызывает ошибку Shape mismatch на DirectML
+            # Настройки для стабильности DML
             sess_options.enable_mem_pattern = False
-            sess_options.enable_cpu_mem_arena = False
             sess_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
             
             session = ort.InferenceSession(str(onnx_path), providers=providers, sess_options=sess_options)
@@ -144,7 +143,7 @@ class ModelManager:
                     for i in range(0, len(sentences), batch_size):
                         batch = sentences[i : i + batch_size]
                         
-                        # Pad batch to fixed size to avoid ONNX Runtime buffer reuse shape mismatches
+                        # Pad batch to fixed size to avoid ONNX Runtime buffer reuse shape mismatches on DML
                         original_len = len(batch)
                         if original_len < batch_size and batch_size > 0:
                             batch = batch + [batch[-1]] * (batch_size - original_len)
@@ -157,7 +156,6 @@ class ModelManager:
                             return_tensors='np'
                         )
                         
-                        # Получаем список ожидаемых входных параметров модели
                         input_names = [i.name for i in self.session.get_inputs()]
                         
                         inputs = {
@@ -167,26 +165,32 @@ class ModelManager:
                         if 'token_type_ids' in encoded:
                              inputs['token_type_ids'] = encoded['token_type_ids'].astype(np.int64)
                         
-                        # Фильтруем inputs, оставляя только то, что ждет модель
                         final_inputs = {k: v for k, v in inputs.items() if k in input_names}
                         
-                        outputs = self.session.run(None, final_inputs)
-                        token_embeddings = outputs[0]  # [batch, seq_len, hidden]
+                        try:
+                            outputs = self.session.run(None, final_inputs)
+                        except Exception as e:
+                            # DirectML error handler
+                            err_str = str(e)
+                            if "0xce" in err_str or "0xcf" in err_str or "utf-8" in err_str:
+                                logger.error("DML Native Error (likely encoding issue masking real error). Retrying with CPU...")
+                                # Fallback logic not easy here without full reload, just re-raise closer to reality 
+                                raise RuntimeError("DirectML Native Crash") from e
+                            raise e
+                            
+                        token_embeddings = outputs[0]
                         
-                        # Slice back to original size if padded
                         if original_len < batch_size:
                             token_embeddings = token_embeddings[:original_len]
                             encoded['attention_mask'] = encoded['attention_mask'][:original_len]
 
                         attention_mask = encoded['attention_mask']
                         
-                        # Mean pooling
                         input_mask_expanded = np.expand_dims(attention_mask, -1)
                         sum_embeddings = np.sum(token_embeddings * input_mask_expanded, axis=1)
                         sum_mask = np.clip(input_mask_expanded.sum(axis=1), a_min=1e-9, a_max=None)
                         embeddings = sum_embeddings / sum_mask
                         
-                        # Normalize
                         norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
                         embeddings = embeddings / np.clip(norms, a_min=1e-9, a_max=None)
                         
@@ -227,8 +231,8 @@ class ModelManager:
             
             model.eval()
             
-            # Dummy input with representative shape (batch 64, seq 512) to help shape inference
-            dummy = tokenizer(["test"]*64, padding="max_length", max_length=512, truncation=True, return_tensors="pt")
+            # Dummy input with batch size 1 for dynamic export
+            dummy = tokenizer(["test"], padding="max_length", max_length=512, truncation=True, return_tensors="pt")
             
             # Export
             torch.onnx.export(
@@ -242,7 +246,7 @@ class ModelManager:
                     'attention_mask': {0: 'batch', 1: 'sequence'},
                     'last_hidden_state': {0: 'batch', 1: 'sequence'}
                 },
-                opset_version=17
+                opset_version=13
             )
             
             logger.info(f"Модель экспортирована в {onnx_path}")

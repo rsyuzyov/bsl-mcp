@@ -276,14 +276,19 @@ def create_app(ib_manager: IBManager) -> FastAPI:
             if not force:
                 return {"error": "Индексация уже запущена", "running": True, "mode": ctx.status.mode}
             # Остановка текущей
-            if ctx.stop_event:
-                ctx.stop_event.set()
-            ctx.status.running = False
-            # Небольшая пауза для завершения
+            ctx.stop_event.set()
+            # Ждём завершения текущей индексации
             import time
-            time.sleep(0.5)
-             
-        threading.Thread(target=ctx.engine.full_reindex, args=(ctx.status,), daemon=True).start()
+            for _ in range(20):  # до 2 секунд
+                if not ctx.status.running:
+                    break
+                time.sleep(0.1)
+        
+        # Сбрасываем stop_event и устанавливаем running ДО запуска потока
+        ctx.stop_event.clear()
+        ctx.status.running = True
+        ctx.status.mode = "full"
+        threading.Thread(target=ctx.engine.full_reindex, args=(ctx.status, ctx.stop_event), daemon=True).start()
         return {"started": True}
 
     @app.post("/api/ib/{name}/reindex/incremental")
@@ -298,13 +303,19 @@ def create_app(ib_manager: IBManager) -> FastAPI:
             if not force:
                 return {"error": "Индексация уже запущена", "running": True, "mode": ctx.status.mode}
             # Остановка текущей
-            if ctx.stop_event:
-                ctx.stop_event.set()
-            ctx.status.running = False
+            ctx.stop_event.set()
+            # Ждём завершения
             import time
-            time.sleep(0.5)
-             
-        threading.Thread(target=ctx.engine.incremental_reindex, args=(ctx.status,), daemon=True).start()
+            for _ in range(20):
+                if not ctx.status.running:
+                    break
+                time.sleep(0.1)
+        
+        # Сбрасываем stop_event и устанавливаем running ДО запуска потока
+        ctx.stop_event.clear()
+        ctx.status.running = True
+        ctx.status.mode = "incremental"
+        threading.Thread(target=ctx.engine.incremental_reindex, args=(ctx.status, ctx.stop_event), daemon=True).start()
         return {"started": True}
 
     # MCP Tool endpoint (assuming it works for ANY IB? Or needs param?)

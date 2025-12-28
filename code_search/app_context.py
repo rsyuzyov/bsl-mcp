@@ -64,6 +64,7 @@ class IBContext:
         """Цикл проверки изменений."""
         log = get_logger(f"ib.{self.config.name}")
         while not self.stop_event.is_set():
+            # Проверяем что индексация не запущена (в т.ч. через API)
             if not self.status.running:
                 try:
                     # Проверка изменений
@@ -72,15 +73,18 @@ class IBContext:
                     # Проверка выполнена
                     self.status.initial_check_pending = False
 
-                    if has_changes:
+                    # Ещё раз проверяем — за время quick_check могли запустить индексацию через API
+                    if has_changes and not self.status.running and not self.stop_event.is_set():
                         log.info(f"Обнаружены изменения, запуск индексации...")
                         self.engine.incremental_reindex(self.status, stop_event=self.stop_event)
                 except Exception as e:
                     log.error(f"Ошибка в цикле обслуживания: {e}", exc_info=True)
             
             # Ждем 5 минут или сигнала остановки
-            if self.stop_event.wait(300):
-                break
+            # После пробуждения от stop_event — проверим is_set в начале цикла
+            self.stop_event.wait(300)
+            # Если stop_event был set и потом clear (перезапуск индексации) — продолжаем цикл
+            # Если stop_event остался set (реальная остановка) — выйдем в начале цикла
 
 
 @dataclass 

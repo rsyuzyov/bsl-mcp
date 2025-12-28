@@ -8,6 +8,7 @@ venv/
 .venv/
 env/
 .env
+.pytest_cache/
 
 # Index data
 1c-index/

@@ -14,6 +14,7 @@ from .chunker import chunk_text
 from ..model_manager import ModelManager
 from ..vector_db import get_vector_db, VectorPoint
 from ..logger import get_logger
+from ..metadata_utils import parse_1c_path, format_object_context
 
 
 # Настройки производительности
@@ -121,11 +122,40 @@ class IndexEngine:
         if self.db:
             self.db.close()
 
+    def cleanup_orphans(self) -> int:
+        """Удалить сироты — чанки, чьи файлы отсутствуют в file_hashes.json.
+        
+        Возвращает количество удалённых файлов.
+        """
+        hashes = load_hashes(self.meta_file)
+        if not hashes:
+            # Если хешей нет — сироты не определить (могут хранить легитимные данные)
+            return 0
+        
+        known_files = set(hashes.keys())
+        db_files = self.db.get_all_file_paths(self.collection_name)
+        
+        orphan_files = db_files - known_files
+        if not orphan_files:
+            return 0
+        
+        self.logger.info(f"Найдено {len(orphan_files)} сирот в БД, удаляю...")
+        for file_path in orphan_files:
+            try:
+                self.db.delete_by_file_path(self.collection_name, file_path)
+            except Exception:
+                pass
+        
+        self.logger.info(f"Удалено {len(orphan_files)} сирот")
+        return len(orphan_files)
+
     def get_all_files(self) -> list[Path]:
-        """Получить все XML и BSL файлы."""
+        """Получить все BSL файлы (код). XML исключены из семантического поиска."""
         if not self.source_dir.exists():
             return []
-        return list(self.source_dir.rglob("*.xml")) + list(self.source_dir.rglob("*.bsl"))
+        # Индексируем только .bsl файлы — это реальный код 1С
+        # XML файлы содержат метаданные, их лучше обрабатывать отдельно
+        return list(self.source_dir.rglob("*.bsl"))
 
     def get_collection_count(self) -> int:
         """Количество точек в коллекции."""
@@ -325,10 +355,22 @@ class IndexEngine:
                     hashes[rel_path] = h
                     status.last_file = rel_path
                     
+                    # Извлекаем метаданные объекта из пути
+                    obj_meta = parse_1c_path(rel_path)
+                    
                     for j, chunk in enumerate(chunks):
+                        payload = {"file_path": rel_path, "chunk": j}
+                        if obj_meta:
+                            payload["object_type"] = obj_meta.object_type
+                            payload["object_type_en"] = obj_meta.object_type_en
+                            payload["object_name"] = obj_meta.object_name
+                            payload["module_type"] = obj_meta.module_type
+                            if obj_meta.form_name:
+                                payload["form_name"] = obj_meta.form_name
+                        
                         batch_points.append({
                             "text": chunk,
-                            "payload": {"file_path": rel_path, "chunk": j}
+                            "payload": payload
                         })
                         chunks_indexed += 1
                     
@@ -377,6 +419,12 @@ class IndexEngine:
         status.reset("incremental")
         
         try:
+            # Очистка сирот перед началом индексации
+            status.status_detail = "Очистка сирот..."
+            orphans_deleted = self.cleanup_orphans()
+            if orphans_deleted:
+                self.logger.info(f"Очищено {orphans_deleted} файлов-сирот")
+            
             files = self.get_all_files()
             old_hashes = load_hashes(self.meta_file)
             new_hashes = {}
@@ -531,14 +579,7 @@ class IndexEngine:
                     for p, emb in zip(batch_points, embeddings)
                 ]
                 
-                # Delete old chunks for changed files BEFORE upsert
-                # (Only unique files in batch needed)
-                changed_files_uniq = set(rel for rel, st, _ in files_in_batch if st == "changed")
-                for rel_path in changed_files_uniq:
-                    try:
-                        self.db.delete_by_file_path(self.collection_name, rel_path)
-                    except: 
-                        pass # avoid crash on delete
+                # Удаление чанков теперь происходит ПЕРЕД обработкой файла (см. ниже)
 
                 t3 = time.time()
                 status.status_detail = f"upsert {len(points)}..."
@@ -561,6 +602,9 @@ class IndexEngine:
                     if rel_path in new_hashes:
                         indexed_hashes[rel_path] = new_hashes[rel_path]
                 
+                # Периодически сохраняем хеши — чтобы прерванная индексация продолжилась с места остановки
+                save_hashes(self.meta_file, indexed_hashes)
+                
                 batch_points = []
                 files_in_batch = []
                 status.status_detail = "reading..."
@@ -580,13 +624,31 @@ class IndexEngine:
                     status.last_file = rel_path
                     if stop_event and stop_event.is_set():
                         break
+                    
+                    # Удаляем старые чанки ПЕРЕД добавлением новых — защита от дубликатов
+                    try:
+                        self.db.delete_by_file_path(self.collection_name, rel_path)
+                    except Exception:
+                        pass
                         
                     chunks = chunk_text(content)
                     
+                    # Извлекаем метаданные объекта из пути
+                    obj_meta = parse_1c_path(rel_path)
+                    
                     for j, chunk in enumerate(chunks):
+                        payload = {"file_path": rel_path, "chunk": j}
+                        if obj_meta:
+                            payload["object_type"] = obj_meta.object_type
+                            payload["object_type_en"] = obj_meta.object_type_en
+                            payload["object_name"] = obj_meta.object_name
+                            payload["module_type"] = obj_meta.module_type
+                            if obj_meta.form_name:
+                                payload["form_name"] = obj_meta.form_name
+                        
                         batch_points.append({
                             "text": chunk,
-                            "payload": {"file_path": rel_path, "chunk": j}
+                            "payload": payload
                         })
                         if len(batch_points) >= BATCH_SIZE:
                             flush_batch()

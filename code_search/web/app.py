@@ -152,9 +152,19 @@ def create_app(ib_manager: IBManager) -> FastAPI:
         if not ctx:
             return HTMLResponse("ИБ не найдена", status_code=404)
         
+        collection_count = 0
+        if not ctx.is_error:
+            try:
+                collection_count = ctx.engine.get_collection_count()
+            except:
+                pass
+        
         return templates.TemplateResponse("ib.html", {
             "request": request,
             "ctx": ctx,
+            "ib_name": ctx.config.name,
+            "ib_title": ctx.config.title,
+            "collection_count": collection_count,
             "active_page": "config"
         })
 

@@ -7,6 +7,7 @@ _morph_lock = threading.Lock()
 
 from ..model_manager import ModelManager
 from ..vector_db import VectorDB
+from ..metadata_utils import is_compilation_directive_match
 
 def get_morph_analyzer():
     """Получить единственный экземпляр MorphAnalyzer."""
@@ -25,6 +26,9 @@ def get_morph_analyzer():
 
 class HybridSearch:
     """Гибридный поиск: семантический + текстовый."""
+    
+    # Минимальный score для чисто семантических результатов (без текстового совпадения)
+    SEMANTIC_MIN_SCORE = 0.45
 
     def __init__(self, db: VectorDB, collection_name: str, model_name: str, embedding_device: str = "cpu"):
         self.db = db
@@ -38,6 +42,72 @@ class HybridSearch:
         morph = get_morph_analyzer()
         words = re.findall(r"[а-яёa-z0-9]+", text.lower())
         return " ".join(morph.parse(w)[0].normal_form for w in words)
+    
+    def extract_snippet(self, text: str, query: str, context_chars: int = 100) -> str:
+        """Извлечь сниппет с контекстом вокруг найденного query.
+        
+        Если query найден — возвращает контекст вокруг него.
+        Иначе — первые 200 символов текста.
+        """
+        if not text:
+            return ""
+        
+        text_lower = text.lower()
+        query_lower = query.lower()
+        
+        # Ищем прямое вхождение
+        pos = text_lower.find(query_lower)
+        if pos == -1:
+            # Пробуем найти отдельные слова запроса
+            query_words = query_lower.split()
+            for word in query_words:
+                if len(word) >= 3:
+                    pos = text_lower.find(word)
+                    if pos != -1:
+                        break
+        
+        if pos != -1:
+            # Найдено — берём контекст вокруг
+            start = max(0, pos - context_chars)
+            end = min(len(text), pos + len(query) + context_chars)
+            
+            # Выравниваем по границам слов
+            if start > 0:
+                space_pos = text.find(' ', start)
+                if space_pos != -1 and space_pos < pos:
+                    start = space_pos + 1
+            if end < len(text):
+                space_pos = text.rfind(' ', pos, end)
+                if space_pos != -1:
+                    end = space_pos
+            
+            snippet = text[start:end].strip()
+            prefix = "..." if start > 0 else ""
+            suffix = "..." if end < len(text) else ""
+            return f"{prefix}{snippet}{suffix}"
+        else:
+            # Не найдено — первые 200 символов
+            if len(text) <= 200:
+                return text.strip()
+            # Обрезаем по границе слова
+            end = text.rfind(' ', 0, 200)
+            if end == -1:
+                end = 200
+            return text[:end].strip() + "..."
+    
+    def highlight_match(self, text: str, query: str) -> str:
+        """Выделить совпадение query в тексте через **маркеры**."""
+        if not text or not query:
+            return text
+        
+        # Экранируем спецсимволы regex
+        pattern = re.escape(query)
+        # Case-insensitive замена с сохранением оригинального регистра
+        def replacer(match):
+            return f"**{match.group(0)}**"
+        
+        result = re.sub(pattern, replacer, text, flags=re.IGNORECASE, count=1)
+        return result
 
     def search(self, query: str, top_k: int = 5) -> list[dict]:
         """Выполнить гибридный поиск."""
@@ -80,7 +150,7 @@ class HybridSearch:
             search_results = self.db.search(
                 collection_name=self.collection_name, 
                 vector=query_embedding, 
-                limit=top_k * 2
+                limit=top_k * 3  # Берём больше для фильтрации
             )
         except Exception as e:
             return [{"file": "", "text": f"❌ Ошибка поиска: {e}", "score": 0, "match": "error"}]
@@ -94,12 +164,31 @@ class HybridSearch:
             text = payload.get("text", "")
             score = hit["score"]
             
-            if query_lower in file_path.lower():
+            # Извлекаем метаданные объекта
+            object_type = payload.get("object_type", "")
+            object_name = payload.get("object_name", "")
+            module_type = payload.get("module_type", "")
+            
+            # Фильтруем ложные совпадения из-за директив компиляции
+            if is_compilation_directive_match(text, query):
+                score -= 0.5  # Штраф за совпадение с директивой
+            
+            # Бонусы за совпадение с метаданными объекта
+            if object_name and query_lower in object_name.lower():
+                score += 1.5
+                match_type = "object_name"
+            elif object_type and query_lower in object_type.lower():
+                score += 1.2
+                match_type = "object_type"
+            elif query_lower in file_path.lower():
                 score += 1.0
                 match_type = "filename"
             elif query_lower in text.lower():
                 score += 0.5
                 match_type = "text"
+            elif query_normalized in self.normalize(object_name or ""):
+                score += 1.0
+                match_type = "object_name_stem"
             elif query_normalized in self.normalize(file_path):
                 score += 0.8
                 match_type = "filename_stem"
@@ -109,9 +198,34 @@ class HybridSearch:
             else:
                 match_type = "semantic"
             
+            # Фильтруем чисто семантические результаты с низким score
+            if match_type == "semantic" and hit["score"] < self.SEMANTIC_MIN_SCORE:
+                continue
+            
             if file_path not in seen_files:
                 seen_files.add(file_path)
-                results.append({"file": file_path, "text": text[:500], "score": score, "match": match_type})
+                
+                # Формируем контекст объекта для отображения
+                context = ""
+                if object_type and object_name:
+                    context = f"{object_type}: {object_name}"
+                    if module_type:
+                        context += f" ({module_type})"
+                
+                # Умный сниппет с контекстом вокруг query
+                snippet = self.extract_snippet(text, query)
+                # Выделяем совпадение
+                snippet = self.highlight_match(snippet, query)
+                
+                results.append({
+                    "file": file_path, 
+                    "text": snippet, 
+                    "score": score, 
+                    "match": match_type,
+                    "payload": payload,  # Возвращаем полный payload
+                    "context": context,  # Контекст объекта
+                })
         
         results.sort(key=lambda x: x["score"], reverse=True)
         return results[:top_k]
+

@@ -319,7 +319,7 @@
                             <span style="font-size: 0.9rem;">{{ ctx.config.embedding_model }}</span>
                         </td>
                         <td>
-                            <div class="status-badge">
+                            <div class="status-badge" data-ib="{{ ctx.config.name }}">
                                 {% if ctx.is_error %}
                                 <span class="status-dot error"></span>
                                 <span style="color: #dc2626;">Ошибка</span>
@@ -327,12 +327,12 @@
                                     style="font-size: 0.75rem; color: #dc2626; margin-top: 0.25rem; white-space: pre-wrap; font-family: monospace;">
                                     {{ ctx.error }}</div>
                                 {% elif ctx.status.running %}
-                                <span class="status-dot running"></span> Индексация ({{
-                                ctx.status.files_processed }} /
-                                {{
-                                ctx.status.total_files }})
+                                <span class="status-dot running"></span>
+                                <span class="status-text">Индексация {{ ctx.status.mode }}: {{ ctx.status.files_indexed
+                                    }}/{{ ctx.status.files_to_index }} файлов</span>
                                 {% elif ctx.status.initial_check_pending %}
-                                <span class="status-dot running"></span> Проверка изменений...
+                                <span class="status-dot running"></span> <span class="status-text">Проверка
+                                    изменений...</span>
                                 {% elif ctx.model_error %}
                                 <span class="status-dot error"></span>
                                 <span style="color: #dc2626;">Ошибка модели</span>
@@ -340,7 +340,7 @@
                                     style="font-size: 0.75rem; color: #dc2626; margin-top: 0.25rem; white-space: pre-wrap; font-family: monospace; max-width: 300px; overflow: hidden; text-overflow: ellipsis;">
                                     {{ ctx.model_error }}</div>
                                 {% else %}
-                                <span class="status-dot active"></span> Активен
+                                <span class="status-dot active"></span> <span class="status-text">Активен</span>
                                 {% endif %}
                             </div>
                         </td>
@@ -612,6 +612,51 @@
             repoPath: String.raw`{{ repo_path }}`.replace(/\\/g, '/'), // Force forward slashes for cross-platform compatibility or handle escapes
             pythonPath: String.raw`{{ python_path }}`.replace(/\\/g, '/')
         };
+
+        // Polling status for all IBs
+        (function pollStatuses() {
+            const badges = document.querySelectorAll('.status-badge[data-ib]');
+            if (badges.length === 0) return;
+
+            async function updateStatuses() {
+                for (const badge of badges) {
+                    const ibName = badge.dataset.ib;
+                    try {
+                        const res = await fetch(`/api/ib/${ibName}/status`);
+                        if (!res.ok) continue;
+                        const s = await res.json();
+
+                        const statusText = badge.querySelector('.status-text');
+                        const statusDot = badge.querySelector('.status-dot');
+
+                        if (s.error) {
+                            // Error state
+                            if (statusDot) statusDot.className = 'status-dot error';
+                            if (statusText) statusText.innerHTML = `Ошибка: ${s.error}`;
+                        } else if (s.running) {
+                            // Indexing
+                            if (statusDot) statusDot.className = 'status-dot running';
+                            const pct = s.pct || 0;
+                            const eta = s.eta_time || '...';
+                            if (statusText) statusText.innerHTML = `${s.mode}: ${pct}% (${s.files_indexed}/${s.files_to_index}) | ETA: ${eta}`;
+                        } else if (s.initial_check_pending) {
+                            // Checking
+                            if (statusDot) statusDot.className = 'status-dot running';
+                            if (statusText) statusText.innerHTML = 'Проверка изменений...';
+                        } else {
+                            // Active
+                            if (statusDot) statusDot.className = 'status-dot active';
+                            if (statusText) statusText.innerHTML = `Активен (${s.collection_count || 0} chunks)`;
+                        }
+                    } catch (e) {
+                        // Ignore errors
+                    }
+                }
+            }
+
+            updateStatuses();
+            setInterval(updateStatuses, 2000);
+        })();
 
 
     </script>

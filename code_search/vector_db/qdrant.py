@@ -110,6 +110,29 @@ class QdrantAdapter(VectorDB):
             from ..logger import get_logger
             get_logger("idx.qdrant").warning(f"Ошибка оптимизации: {e}")
 
+    def get_all_file_paths(self, collection_name: str) -> set[str]:
+        """Получить все уникальные file_path из коллекции через scroll."""
+        file_paths = set()
+        try:
+            offset = None
+            while True:
+                results, offset = self.client.scroll(
+                    collection_name=collection_name,
+                    limit=1000,
+                    offset=offset,
+                    with_payload=["file_path"],
+                    with_vectors=False
+                )
+                for point in results:
+                    fp = point.payload.get("file_path")
+                    if fp:
+                        file_paths.add(fp)
+                if offset is None:
+                    break
+        except Exception:
+            pass
+        return file_paths
+
     def clear_and_compact(self, collection_name: str, vector_size: int):
         """Удаляет все данные и сжимает SQLite хранилище."""
         from ..logger import get_logger

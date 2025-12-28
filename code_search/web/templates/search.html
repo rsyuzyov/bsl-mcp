@@ -90,6 +90,7 @@
                     <a href="vscode://file/${item.file}" class="result-title">${item.file.split(/[\\/]/).pop() || 'Code Fragment'}</a>
                     <span style="font-size: 0.8rem; background: #eee; padding: 2px 6px; border-radius: 4px;">${item.ib}</span>
                 </div>
+                ${item.context ? `<div style="color: #2563eb; font-size: 0.85rem; margin: 0.25rem 0; font-weight: 500;">${escapeHtml(item.context)}</div>` : ''}
                 <div class="result-path">${item.file} (Score: ${item.score.toFixed(3)}, ${item.match})</div>
                 <div class="result-snippet">
                     <pre style="margin: 0; white-space: pre-wrap; font-family: 'Consolas', monospace; background: #f8f9fa; padding: 0.5rem; border-radius: 4px;">${escapeHtml(item.text)}</pre>

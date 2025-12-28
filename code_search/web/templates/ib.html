@@ -8,13 +8,14 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-color: #121212;
-            --card-bg: #1E1E1E;
-            --text-color: #E0E0E0;
-            --accent-color: #BB86FC;
-            --accent-hover: #9955E8;
-            --border-color: #333;
-            --search-bg: #2C2C2C;
+            --bg-color: #f5f7fa;
+            --card-bg: #ffffff;
+            --text-color: #1f2937;
+            --text-muted: #6b7280;
+            --accent-color: #4f46e5;
+            --accent-hover: #4338ca;
+            --border-color: #e5e7eb;
+            --search-bg: #ffffff;
         }
 
         body {
@@ -31,7 +32,7 @@
 
         .sidebar {
             width: 280px;
-            background-color: #171717;
+            background-color: #ffffff;
             border-right: 1px solid var(--border-color);
             padding: 24px;
             display: flex;
@@ -65,10 +66,10 @@
             padding: 16px 20px;
             font-size: 18px;
             background: var(--search-bg);
-            border: 1px solid #444;
+            border: 1px solid var(--border-color);
             border-radius: 12px;
-            color: #fff;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            color: var(--text-color);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
             box-sizing: border-box;
             transition: border-color 0.2s;
         }
@@ -117,10 +118,10 @@
         .result-snippet {
             font-size: 14px;
             line-height: 1.5;
-            color: #ccc;
+            color: var(--text-color);
             white-space: pre-wrap;
             font-family: 'Consolas', 'Monaco', monospace;
-            background: #121212;
+            background: #f8f9fa;
             padding: 10px;
             border-radius: 4px;
             max-height: 200px;

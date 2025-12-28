@@ -49,6 +49,10 @@ class VectorDB(ABC):
         """Оптимизация коллекции (очистка WAL, сжатие). По умолчанию ничего не делает."""
         pass
 
+    def get_all_file_paths(self, collection_name: str) -> set[str]:
+        """Получить все уникальные file_path из коллекции. По умолчанию пустой set."""
+        return set()
+
     def clear_and_compact(self, collection_name: str, vector_size: int):
         """Полная очистка коллекции и сжатие хранилища. По умолчанию delete+create."""
         self.delete_collection(collection_name)

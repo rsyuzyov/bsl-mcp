@@ -139,14 +139,12 @@ class IndexEngine:
         if not orphan_files:
             return 0
         
-        self.logger.info(f"Найдено {len(orphan_files)} сирот в БД, удаляю...")
-        for file_path in orphan_files:
-            try:
-                self.db.delete_by_file_path(self.collection_name, file_path)
-            except Exception:
-                pass
+        self.logger.info(f"Найдено {len(orphan_files)} сирот в БД, удаляю batch...")
         
-        self.logger.info(f"Удалено {len(orphan_files)} сирот")
+        # Используем batch-удаление вместо поочерёдного — критически быстрее
+        deleted = self.db.delete_by_file_paths(self.collection_name, orphan_files)
+        
+        self.logger.info(f"Удалено {deleted} точек-сирот из {len(orphan_files)} файлов")
         return len(orphan_files)
 
     def get_all_files(self) -> list[Path]:
@@ -633,6 +631,10 @@ class IndexEngine:
                         
                     chunks = chunk_text(content)
                     
+                    # Добавляем файл в батч ПЕРЕД обработкой чанков!
+                    # Иначе при flush_batch хэш файла не сохранится
+                    files_in_batch.append((rel_path, st, len(chunks)))
+                    
                     # Извлекаем метаданные объекта из пути
                     obj_meta = parse_1c_path(rel_path)
                     
@@ -652,8 +654,6 @@ class IndexEngine:
                         })
                         if len(batch_points) >= BATCH_SIZE:
                             flush_batch()
-                            
-                    files_in_batch.append((rel_path, st, len(chunks)))
                     
                     status.chunks_indexed += len(chunks)
                     

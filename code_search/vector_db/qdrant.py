@@ -55,6 +55,55 @@ class QdrantAdapter(VectorDB):
         except Exception:
             pass
 
+    def delete_by_file_paths(self, collection_name: str, file_paths: set[str]) -> int:
+        """Batch-удаление точек по списку file_path. Возвращает количество удалённых."""
+        if not file_paths:
+            return 0
+        
+        from ..logger import get_logger
+        log = get_logger("idx.qdrant")
+        
+        # Собираем все ID точек для удаления через scroll
+        point_ids = []
+        try:
+            offset = None
+            while True:
+                results, offset = self.client.scroll(
+                    collection_name=collection_name,
+                    limit=1000,
+                    offset=offset,
+                    with_payload=["file_path"],
+                    with_vectors=False
+                )
+                for point in results:
+                    fp = point.payload.get("file_path")
+                    if fp in file_paths:
+                        point_ids.append(point.id)
+                if offset is None:
+                    break
+        except Exception as e:
+            log.warning(f"Ошибка scroll при сборе сирот: {e}")
+            return 0
+        
+        if not point_ids:
+            return 0
+        
+        # Удаляем батчами по 1000 ID
+        deleted = 0
+        batch_size = 1000
+        for i in range(0, len(point_ids), batch_size):
+            batch = point_ids[i:i + batch_size]
+            try:
+                self.client.delete(
+                    collection_name=collection_name,
+                    points_selector=batch
+                )
+                deleted += len(batch)
+            except Exception as e:
+                log.warning(f"Ошибка batch delete: {e}")
+        
+        return deleted
+
     def search(self, collection_name: str, vector: List[float], limit: int) -> List[Dict[str, Any]]:
         try:
             search_results = self.client.query_points(

@@ -31,7 +31,7 @@ logs/
 .onnx_cache*/
 
 # Agent
-.agent/
+#.agent/
 
 # Runtime data
 .last_ibs.json

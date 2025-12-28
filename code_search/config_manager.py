@@ -65,6 +65,7 @@ class IBConfig:
     index_dir: str = ""
     embedding_model: str = "cointegrated/rubert-tiny2"
     embedding_device: str = "cpu"  # cpu, gpu, dml
+    embedding_mode: str = "full"  # full | methods | signatures
     vector_db: str = "qdrant"
 
     def __post_init__(self):

@@ -176,6 +176,7 @@ def create_app(ib_manager: IBManager) -> FastAPI:
         index_dir: str = Form(...),
         embedding_model: str = Form("cointegrated/rubert-tiny2"),
         embedding_device: str = Form("cpu"),
+        embedding_mode: str = Form("full"),
         engine: str = Form("qdrant")
     ):
         try:
@@ -186,6 +187,7 @@ def create_app(ib_manager: IBManager) -> FastAPI:
                 index_dir=index_dir,
                 embedding_model=embedding_model,
                 embedding_device=embedding_device,
+                embedding_mode=embedding_mode,
                 vector_db=engine
             )
             ib_manager.add_ib(conf)
@@ -201,6 +203,7 @@ def create_app(ib_manager: IBManager) -> FastAPI:
         index_dir: str = Form(...),
         embedding_model: str = Form("cointegrated/rubert-tiny2"),
         embedding_device: str = Form("cpu"),
+        embedding_mode: str = Form("full"),
         engine: str = Form("qdrant")
     ):
         try:
@@ -215,6 +218,7 @@ def create_app(ib_manager: IBManager) -> FastAPI:
                 index_dir=index_dir,
                 embedding_model=embedding_model,
                 embedding_device=embedding_device,
+                embedding_mode=embedding_mode,
                 vector_db=engine
             )
             ib_manager.add_ib(conf, overwrite=True)

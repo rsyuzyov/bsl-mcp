@@ -273,7 +273,8 @@ class IBManager:
                 embedding_model_name=ib_conf.embedding_model,
                 embedding_device=ib_conf.embedding_device,
                 vector_db_type=ib_conf.vector_db,
-                scan_workers=self.config_manager.config.scan_workers
+                scan_workers=self.config_manager.config.scan_workers,
+                embedding_mode=ib_conf.embedding_mode
             )
             
             self._set_init_stage("Инициализация HybridSearch (подготовка поиска)")

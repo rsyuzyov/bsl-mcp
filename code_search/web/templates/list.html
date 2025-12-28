@@ -203,6 +203,16 @@
                     </select>
                 </div>
 
+                <!-- Embedding Mode -->
+                <div>
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Режим эмбеддинга</label>
+                    <select name="embedding_mode" class="form-control">
+                        <option value="full" selected>Полный текст</option>
+                        <option value="methods">Методы + комментарии</option>
+                        <option value="signatures">Только сигнатуры</option>
+                    </select>
+                </div>
+
                 <!-- Engine -->
                 <div>
                     <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Поисковый
@@ -350,7 +360,8 @@
                                 data-name="{{ ctx.config.name }}" data-title="{{ ctx.config.title }}"
                                 data-source="{{ ctx.config.source_dir }}" data-index="{{ ctx.config.index_dir }}"
                                 data-model="{{ ctx.config.embedding_model }}"
-                                data-device="{{ ctx.config.embedding_device }}" data-engine="{{ ctx.config.vector_db }}"
+                                data-device="{{ ctx.config.embedding_device }}"
+                                data-mode="{{ ctx.config.embedding_mode }}" data-engine="{{ ctx.config.vector_db }}"
                                 style="border: 1px solid var(--border-color); margin-right: 0.25rem;">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -425,6 +436,7 @@
             ibForm.index_dir.value = data.index;
             ibForm.embedding_model.value = data.model;
             ibForm.embedding_device.value = data.device || 'cpu';
+            ibForm.embedding_mode.value = data.mode || 'full';
             ibForm.engine.value = data.engine;
 
             document.getElementById('edit-actions').style.display = 'flex';

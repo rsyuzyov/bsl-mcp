@@ -11,6 +11,7 @@ from ..config import VECTOR_SIZE, IndexingStatus
 from ..utils import format_time, format_duration
 from .hasher import file_hash, load_hashes, save_hashes
 from .chunker import chunk_text
+from .method_chunker import extract_method_chunks
 from ..model_manager import ModelManager
 from ..vector_db import get_vector_db, VectorPoint
 from ..logger import get_logger
@@ -25,12 +26,13 @@ EMBED_BATCH_SIZE = 64
 class IndexEngine:
     """Движок индексации 1С выгрузки для конкретной ИБ."""
 
-    def __init__(self, source_dir: str, index_dir: str, collection_name: str, embedding_model_name: str, embedding_device: str = "cpu", vector_db_type: str = "qdrant", vector_size: int = VECTOR_SIZE, scan_workers: int = 4):
+    def __init__(self, source_dir: str, index_dir: str, collection_name: str, embedding_model_name: str, embedding_device: str = "cpu", vector_db_type: str = "qdrant", vector_size: int = VECTOR_SIZE, scan_workers: int = 4, embedding_mode: str = "full"):
         self.source_dir = Path(source_dir)
         self.index_dir = Path(index_dir)
         self.collection_name = collection_name
         self.embedding_model_name = embedding_model_name
         self.embedding_device = embedding_device
+        self.embedding_mode = embedding_mode  # full | methods | signatures
         self.vector_db_type = vector_db_type
         self.vector_size = vector_size
         self.scan_workers = scan_workers
@@ -227,15 +229,32 @@ class IndexEngine:
         if status.running and status.files_to_index > 0:
             self.logger.info(status.format_console(self.get_collection_count()))
 
-    def _read_file(self, file_path: Path) -> tuple[Path, str, str, list[str]] | None:
-        """Читает файл и возвращает (path, rel_path, hash, chunks)."""
+    def _get_chunks(self, content: str) -> list[tuple[str, dict]]:
+        """Получить чанки в соответствии с embedding_mode.
+        
+        Returns:
+            Список (text, extra_metadata) для каждого чанка.
+        """
+        if self.embedding_mode in ("methods", "signatures"):
+            # Режим методов: извлекаем только методы
+            return extract_method_chunks(content, mode=self.embedding_mode)
+        else:
+            # Режим full: разбиваем весь текст на чанки
+            chunks = chunk_text(content)
+            return [(chunk, {}) for chunk in chunks]
+
+    def _read_file(self, file_path: Path) -> tuple[Path, str, str, list[tuple[str, dict]]] | None:
+        """Читает файл и возвращает (path, rel_path, hash, chunks).
+        
+        chunks - список кортежей (text, extra_metadata).
+        """
         try:
             content_bytes = file_path.read_bytes()
             h = hashlib.md5(content_bytes).hexdigest()
             content = content_bytes.decode("utf-8-sig", errors="ignore")
             
             rel_path = str(file_path.relative_to(self.source_dir))
-            chunks = chunk_text(content)
+            chunks = self._get_chunks(content)
             return (file_path, rel_path, h, chunks)
         except Exception as e:
             self.logger.error(f"Ошибка чтения {file_path}: {e}")
@@ -356,8 +375,10 @@ class IndexEngine:
                     # Извлекаем метаданные объекта из пути
                     obj_meta = parse_1c_path(rel_path)
                     
-                    for j, chunk in enumerate(chunks):
+                    for j, (chunk_text, chunk_meta) in enumerate(chunks):
                         payload = {"file_path": rel_path, "chunk": j}
+                        # Добавляем метаданные из чанкера (func_name, line_number и т.д.)
+                        payload.update(chunk_meta)
                         if obj_meta:
                             payload["object_type"] = obj_meta.object_type
                             payload["object_type_en"] = obj_meta.object_type_en
@@ -367,7 +388,7 @@ class IndexEngine:
                                 payload["form_name"] = obj_meta.form_name
                         
                         batch_points.append({
-                            "text": chunk,
+                            "text": chunk_text,
                             "payload": payload
                         })
                         chunks_indexed += 1
@@ -629,7 +650,7 @@ class IndexEngine:
                     except Exception:
                         pass
                         
-                    chunks = chunk_text(content)
+                    chunks = self._get_chunks(content)
                     
                     # Добавляем файл в батч ПЕРЕД обработкой чанков!
                     # Иначе при flush_batch хэш файла не сохранится
@@ -638,8 +659,10 @@ class IndexEngine:
                     # Извлекаем метаданные объекта из пути
                     obj_meta = parse_1c_path(rel_path)
                     
-                    for j, chunk in enumerate(chunks):
+                    for j, (chunk_text, chunk_meta) in enumerate(chunks):
                         payload = {"file_path": rel_path, "chunk": j}
+                        # Добавляем метаданные из чанкера (func_name, line_number и т.д.)
+                        payload.update(chunk_meta)
                         if obj_meta:
                             payload["object_type"] = obj_meta.object_type
                             payload["object_type_en"] = obj_meta.object_type_en
@@ -649,7 +672,7 @@ class IndexEngine:
                                 payload["form_name"] = obj_meta.form_name
                         
                         batch_points.append({
-                            "text": chunk,
+                            "text": chunk_text,
                             "payload": payload
                         })
                         if len(batch_points) >= BATCH_SIZE:

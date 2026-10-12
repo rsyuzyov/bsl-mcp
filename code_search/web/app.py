@@ -7,9 +7,21 @@ from fastapi import FastAPI, HTTPException, Request, Form
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.routing import Route
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from ..app_context import IBManager, IBConfig
 from ..model_manager import ModelManager
+
+
+class _AsgiEndpoint:
+    """Keep Starlette from wrapping an ASGI transport as a request handler."""
+
+    def __init__(self, handler: ASGIApp):
+        self.handler = handler
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        await self.handler(scope, receive, send)
 
 
 def create_app(ib_manager: IBManager) -> FastAPI:
@@ -419,23 +431,17 @@ def create_app(ib_manager: IBManager) -> FastAPI:
     mcp_server = create_mcp_server(ib_manager)
     sse_transport = SseServerTransport("/messages")
 
-    @app.get("/sse")
-    async def handle_sse(request: Request):
-        try:
-             async with sse_transport.connect_sse(
-                 request.scope, request.receive, request._send
-             ) as streams:
-                 await mcp_server.run(
-                     streams[0], streams[1], 
-                     sse_transport.initialization_options
-                 )
-        except Exception:
-             # Client disconnected or error
-             pass
+    async def handle_sse(scope: Scope, receive: Receive, send: Send) -> None:
+        async with sse_transport.connect_sse(scope, receive, send) as streams:
+            await mcp_server.run(
+                streams[0], streams[1], mcp_server.create_initialization_options()
+            )
 
-    @app.post("/messages")
-    async def handle_messages(request: Request):
-        await sse_transport.handle_post_message(request.scope, request.receive, request._send)
+    # Both transports send their own ASGI response; FastAPI must not send another.
+    app.router.routes.extend([
+        Route("/sse", _AsgiEndpoint(handle_sse), methods=["GET"]),
+        Route("/messages", _AsgiEndpoint(sse_transport.handle_post_message), methods=["POST"]),
+    ])
 
     return app
 
